@@ -16,7 +16,7 @@ export default function EmptyState({
       <div className="w-24 h-24 mb-5 text-primary">
         <svg viewBox="0 0 96 96" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
           {/* Ledger book */}
-          <rect x="18" y="24" width="60" height="48" rx="8" fill="#F6F4EF" stroke="#E7E2D8" strokeWidth="2.5" />
+          <rect x="18" y="24" width="60" height="48" rx="8" fill="#FEF9EE" stroke="#E7E2D8" strokeWidth="2.5" />
           <path d="M48 24V72" stroke="#E7E2D8" strokeWidth="2" strokeDasharray="3 3" />
           {/* Ruled lines in ledger */}
           <line x1="26" y1="36" x2="42" y2="36" stroke="#8A948E" strokeWidth="2" strokeLinecap="round" />

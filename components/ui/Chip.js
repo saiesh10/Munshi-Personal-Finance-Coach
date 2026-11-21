@@ -16,7 +16,7 @@ export default function Chip({
   className = ''
 }) {
   const color = dotColor || (category ? getCategoryColor(category) : '#5E6B64');
-  const tint = category ? getCategoryTint(category) : '#F6F4EF';
+  const tint = category ? getCategoryTint(category) : '#FEF9EE';
 
   return (
     <button
