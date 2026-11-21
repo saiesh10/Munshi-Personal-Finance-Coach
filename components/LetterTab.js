@@ -20,6 +20,7 @@ import Button from './ui/Button';
 import Segmented from './ui/Segmented';
 import Select from './ui/Select';
 import Skeleton from './ui/Skeleton';
+import FutureYouAvatar from './FutureYouAvatar';
 import { isSupported as isTtsSupported, speak, pause, resume, stop, splitSentences } from '@/lib/voice';
 import { isSupported as isSttSupported, listen, stopListening } from '@/lib/stt';
 import { askFuture } from '@/lib/client';
@@ -32,7 +33,8 @@ export default function LetterTab() {
     isLoading: isLetterLoading,
     error: letterError,
     projection,
-    goal
+    goal,
+    profile
   } = useLedger();
 
   // Language state: 'en' | 'hi'
@@ -53,6 +55,7 @@ export default function LetterTab() {
   const [conversation, setConversation] = useState([]);
   const [isAsking, setIsAsking] = useState(false);
   const [askError, setAskError] = useState(null);
+  const [speakingAnswerIndex, setSpeakingAnswerIndex] = useState(-1);
 
   useEffect(() => {
     setTtsSupported(isTtsSupported());
@@ -117,6 +120,7 @@ export default function LetterTab() {
     setIsPlaying(false);
     setIsPaused(false);
     setActiveSentenceIndex(-1);
+    setSpeakingAnswerIndex(-1);
   };
 
   // Handle Language Switch
@@ -132,6 +136,7 @@ export default function LetterTab() {
 
   // Build summary payload for /api/ask
   const buildCurrentSummary = () => {
+    const rentCost = profile?.fixedCosts?.find(f => /rent|housing/i.test(f.name))?.amount || 28000;
     return {
       goalName: goal?.name || 'Financial Goal',
       targetAmount: goal?.targetAmount || 500000,
@@ -150,6 +155,8 @@ export default function LetterTab() {
       topCategories: projection?.topCategories || [],
       topOverspendRupeeGap: projection?.topOverspend?.rupeeGap || 2500,
       cutPctNeeded: projection?.cutPctNeeded || 15,
+      currentRent: rentCost,
+      fixedCosts: profile?.fixedCosts || [],
       lang: language
     };
   };
@@ -182,9 +189,11 @@ export default function LetterTab() {
       setConversation(prev => [...prev.slice(-2), newTurn]);
 
       if (usedMic && ttsSupported) {
+        setSpeakingAnswerIndex(conversation.length);
         speak(res.answer, {
           lang: language === 'hi' ? 'hi-IN' : 'en-IN',
-          rate: getNumericRate()
+          rate: getNumericRate(),
+          onEnd: () => setSpeakingAnswerIndex(-1)
         });
       }
     } catch (err) {
@@ -228,11 +237,14 @@ export default function LetterTab() {
     });
   };
 
-  const handleSpeakAnswer = (text) => {
+  const handleSpeakAnswer = (text, idx = 0) => {
     if (!ttsSupported) return;
+    setSpeakingAnswerIndex(idx);
+    setIsPlaying(false);
     speak(text, {
       lang: language === 'hi' ? 'hi-IN' : 'en-IN',
-      rate: getNumericRate()
+      rate: getNumericRate(),
+      onEnd: () => setSpeakingAnswerIndex(-1)
     });
   };
 
@@ -250,19 +262,15 @@ export default function LetterTab() {
 
   return (
     <div className="flex flex-col gap-8 w-full max-w-3xl mx-auto pb-20">
-      {/* Hero Section with Centered 120px CSS Orb */}
+      {/* Hero Section with Interactive 3D Model of Future You */}
       <div className="flex flex-col items-center justify-center text-center pt-4">
-        {/* The 120px Animated Orb */}
-        <div className="relative w-[120px] h-[120px] mb-6 flex items-center justify-center">
-          <div
-            className={`w-[120px] h-[120px] rounded-full bg-gradient-to-tr from-primary via-[#1B7F5C] to-accent-saffron transition-all duration-500 ${
-              isPlaying && !isPaused ? 'animate-orb-active' : 'animate-orb-idle'
-            }`}
-          />
-          <div className="absolute w-[100px] h-[100px] rounded-full bg-surface/20 backdrop-blur-sm flex items-center justify-center text-white">
-            <Sparkles className="w-8 h-8 opacity-90 stroke-[1.75]" />
-          </div>
-        </div>
+        {/* 3D Human Model Speaking Avatar */}
+        <FutureYouAvatar
+          isSpeaking={isPlaying || speakingAnswerIndex !== -1}
+          isPaused={isPaused}
+          size={140}
+          className="mb-3"
+        />
 
         <h2 className="font-serif text-[38px] sm:text-[40px] font-normal text-ink leading-tight">
           {language === 'hi' ? 'भविष्य का संदेश' : 'Future You'}
@@ -601,11 +609,19 @@ export default function LetterTab() {
                     {ttsSupported && (
                       <button
                         type="button"
-                        onClick={() => handleSpeakAnswer(turn.a)}
-                        className="text-[12px] font-medium text-primary hover:underline flex items-center gap-1 self-start cursor-pointer pt-1"
+                        onClick={() => handleSpeakAnswer(turn.a, idx)}
+                        className={`text-[12px] font-medium flex items-center gap-1.5 self-start cursor-pointer pt-1 transition-colors ${
+                          speakingAnswerIndex === idx
+                            ? 'text-accent-saffron font-semibold'
+                            : 'text-primary hover:underline'
+                        }`}
                       >
-                        <Volume2 className="w-3.5 h-3.5" />
-                        <span>{language === 'hi' ? 'सुनें' : 'Hear it'}</span>
+                        <Volume2 className={`w-3.5 h-3.5 ${speakingAnswerIndex === idx ? 'animate-pulse' : ''}`} />
+                        <span>
+                          {speakingAnswerIndex === idx
+                            ? (language === 'hi' ? 'बोल रहे हैं…' : 'Speaking…')
+                            : (language === 'hi' ? 'सुनें' : 'Hear it')}
+                        </span>
                       </button>
                     )}
                   </div>

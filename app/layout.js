@@ -17,6 +17,11 @@ const fraunces = Fraunces({
 export const metadata = {
   title: 'Munshi — Personal Finance Coach',
   description: 'Private, zero-cost personal finance management and projection bahi-khata for India.',
+  icons: {
+    icon: '/icon.svg',
+    shortcut: '/icon.svg',
+    apple: '/icon.svg'
+  }
 };
 
 export default function RootLayout({ children }) {

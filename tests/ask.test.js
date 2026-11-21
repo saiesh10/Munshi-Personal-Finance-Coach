@@ -133,4 +133,22 @@ describe('Future You Voice & Ask Engine', () => {
     const overlong = new Array(85).fill('word').join(' ');
     assert.equal(isValidSpokenAnswer(overlong), false);
   });
+
+  test('Dynamic question calculation: different rent amounts produce distinct, accurate answers', async () => {
+    const res8000 = await answerFutureQuestion({
+      question: 'what if my rent increases to 8000',
+      summary: mockSummary,
+      history: []
+    });
+
+    const res10000 = await answerFutureQuestion({
+      question: 'what if my rent increases to 10000 rupees',
+      summary: mockSummary,
+      history: []
+    });
+
+    assert.notEqual(res8000.answer, res10000.answer, 'Answers for 8000 vs 10000 rent must be different');
+    assert.ok(res8000.answer.includes('8,000') || res8000.answer.includes('8000'), 'Should mention 8,000 in answer');
+    assert.ok(res10000.answer.includes('10,000') || res10000.answer.includes('10000'), 'Should mention 10,000 in answer');
+  });
 });
