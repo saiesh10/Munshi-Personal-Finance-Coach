@@ -48,4 +48,17 @@ Txn Date,Particulars,Debit,Credit,Balance
     assert.equal(zepto.direction, 'debit');
     assert.equal(zepto.date, '2026-11-18');
   });
+
+  test('CSV with SMS message column extracts transactions via row-level parser', () => {
+    const csv = `Date,Message
+14/11/2026,Paid Rs 340.00 to SWIGGY via UPI on 14-Nov-26. Ref 631892182912
+12/11/2026,Rs 499.00 debited from A/C XX4102 on 12-Nov-26 to NETFLIX MUMBAI`;
+
+    const result = parseCsv(csv);
+    assert.equal(result.transactions.length, 2);
+    assert.equal(result.transactions[0].amount, 340);
+    assert.equal(result.transactions[0].merchantKey, 'SWIGGY');
+    assert.equal(result.transactions[1].amount, 499);
+    assert.equal(result.transactions[1].merchantKey, 'NETFLIX');
+  });
 });

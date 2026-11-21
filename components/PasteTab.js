@@ -96,8 +96,10 @@ export default function PasteTab() {
       const stepTimer1 = setTimeout(() => setReadingStep(2), 250);
       const stepTimer2 = setTimeout(() => setReadingStep(3), 500);
 
+      const isCsv = uploadedFile?.name?.toLowerCase().endsWith('.csv');
+
       await handleParseAndCategorize({
-        text: activeSegment === 'text' ? inputText : undefined,
+        text: activeSegment === 'text' ? inputText : (!isCsv ? fileContent : undefined),
         csv: activeSegment === 'file' ? fileContent : undefined
       });
 
@@ -177,7 +179,7 @@ export default function PasteTab() {
               <input
                 ref={fileInputRef}
                 type="file"
-                accept=".csv,text/csv"
+                accept=".csv,.txt,.tsv,text/csv,text/plain"
                 onChange={handleFileSelect}
                 className="hidden"
               />
@@ -193,8 +195,8 @@ export default function PasteTab() {
                     <UploadCloud className="w-5 h-5 stroke-[1.75]" />
                   </div>
                   <div>
-                    <span className="text-[14px] font-medium text-ink">Drop a CSV here or browse</span>
-                    <p className="text-[12px] text-muted mt-0.5">Supports HDFC, SBI, ICICI, Axis, and standard bank exports</p>
+                    <span className="text-[14px] font-medium text-ink">Drop a CSV or message file here or browse</span>
+                    <p className="text-[12px] text-muted mt-0.5">Supports bank statements and SMS message exports (.csv, .txt)</p>
                   </div>
                 </div>
               ) : (

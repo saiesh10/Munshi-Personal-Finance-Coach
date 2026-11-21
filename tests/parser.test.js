@@ -82,4 +82,21 @@ Sent 2,000 INR from GPay on Sunday evening. Memo: dinner split.`;
     assert.equal(result.transactions.length, 0);
     assert.equal(result.unparsed.length, 2);
   });
+
+  test('AI fallback extracts transactions from irregular settlement messages', async () => {
+    const { parseUnreadableSmsLines } = require('../lib/engine/ai');
+    const irregular = [
+      'Your payment of INR 850.00 to BLINKIT was successful on 15-Nov-2026. Ref: 981273',
+      'Account XX4102 credited with Rs. 5000.00 on 12/11/2026 by refund from AMAZON'
+    ];
+
+    const extracted = await parseUnreadableSmsLines(irregular);
+    assert.equal(extracted.length, 2);
+    assert.equal(extracted[0].amount, 850);
+    assert.equal(extracted[0].direction, 'debit');
+    assert.equal(extracted[0].merchantKey, 'BLINKIT');
+    assert.equal(extracted[1].amount, 5000);
+    assert.equal(extracted[1].direction, 'credit');
+    assert.equal(extracted[1].merchantKey, 'AMAZON');
+  });
 });
