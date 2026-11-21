@@ -2,49 +2,84 @@
 
 > *The accountant who remembers you.*
 
-A zero-cost, private personal finance coach designed for Indian households. Built on the timeless discipline of the mercantile *bahi-khata*, Munshi parses messy Indian bank SMS messages and statements, categorizes expenditures, audits recurring subscriptions ("quiet leaks"), runs deterministic multi-month goal projections, and delivers a voice-enabled dispatch from your future self.
+Munshi is a private, zero-cost personal finance coach and modern *bahi-khata* designed for Indian households. It parses messy Indian bank SMS messages and statements, categorizes expenditures, audits recurring subscriptions ("quiet leaks"), runs deterministic multi-month goal projections, and delivers a voice-enabled dispatch from your future self.
 
 ---
 
-## 5-Screen Ledger Architecture
+## Architecture & Views
 
 ```
-01 Paste  ──►  02 Ledger  ──►  03 Quiet leaks  ──►  04 Plan  ──►  05 Letter
-(Intake)       (Journal)       (Subscriptions)     (Course)       (Voice & Letter)
+Overview  ──►  Paste  ──►  Ledger  ──►  Quiet leaks  ──►  Plan  ──►  Future You
+(Home)         (Intake)    (Journal)   (Subscriptions)   (Course)   (Voice & Letter)
 ```
 
-1. **01 Paste**: Paste raw SMS alerts or upload bank CSV statements. Cleans and extracts transactions using deterministic regex and offline PapaParse.
-2. **02 Ledger**: The core *bahi-khata* table. Changing any category creates a rule that retroactively updates matching historical rows and persists across future statements.
-3. **03 Quiet leaks**: Exposes forgotten subscriptions, price hikes, and unutilized membership companions (Swiggy One, Zomato Gold, Amazon Prime, Uber One). One-click to test skipping in your plan.
-4. **04 Plan**: Deterministic multi-month cash flow simulation. Drag category cut sliders (-50% to +50%) or test rent adjustments to see your goal arrival date move in real time. Mid-month pacing drift nudges alert you if spend is outpacing targets.
-5. **05 Letter (Future You Voice)**: An authentic first-person letter written from the date you reach your goal. Includes voice read-aloud and conversational voice Q&A ("Ask Future You").
+1. **Overview (`/overview` or `/`)**:
+   - Modern fintech dashboard with greeting in Fraunces 28px.
+   - 4 KPI cards: Spent this month, Left this month, Goal progress ring, Subscriptions per year.
+   - Recharts Donut chart with category palette & center total label.
+   - Cash Flow grouped bar chart (Monthly In vs Out).
+   - "Munshi says" insight card highlighting pacing drift and actionable savings.
+   - Recent transactions with category chips and avatars.
+
+2. **Paste (`/paste`)**:
+   - Two-column intake desk with segmented tabs (Paste texts / Upload file).
+   - Live client-side SMS detection counter.
+   - Drag-and-drop CSV statement parser scanning past bank preambles.
+   - Real 3-step progress checklist (Reading messages → Sorting into categories → Looking for subscriptions).
+   - Supported bank formats guide and privacy notice.
+
+3. **Ledger (`/ledger`)**:
+   - 56px high transaction rows with merchant avatars and category chips.
+   - Category combobox popover: fixing any category creates a rule, flashes affected rows in primary tint for 1.2s, and triggers a Sonner toast with an 8-second **Undo** action.
+   - Search input, category multi-filter, type filter (All / Money out / Money in).
+   - Slide-in right drawer with complete transaction details, original raw message, copy button, and merchant history.
+   - Client-side CSV export.
+
+4. **Quiet leaks (`/leaks`)**:
+   - Audits weekly, monthly, and yearly subscriptions.
+   - Annual recurring commitment count-up with a stacked category color share bar.
+   - Detects price hikes (e.g. Hotstar ₹149 → ₹299), unused companion memberships (e.g. Swiggy One with ≤1 order in 3 months), and overlapping streaming services.
+   - Segmented Keep / Cancel controls with live savings calculation.
+   - Sticky bottom bar to port savings directly into the Plan.
+
+5. **Plan (`/plan`)**:
+   - Mid-month spend pacing drift alerts with calculation popovers.
+   - Grouped cards for monthly income, editable fixed costs with `+` / `-` steppers, and goal milestone parameters.
+   - Recharts area/line chart plotting status-quo, plan trajectory with subtle gradient fill, and what-if scenarios.
+   - Top category sliders (-50% to +50%) with live monthly savings effects.
+   - Rent stepper (₹500 increments) and one-click presets.
+
+6. **Future You (`/letter`)**:
+   - 120px CSS gradient orb that animates softly and pulses during audio playback.
+   - Paper-toned letter card (`#FBF8F1`) in Fraunces 21px with interactive sentence-level highlight tracking and click-to-seek.
+   - Speech controls: Play/Pause, speed (0.9x, 1x, 1.25x), voice tones (Warm, Calm, Deep), and download testimony.
+   - Conversational voice & text dialogue with speech recognition (`en-IN`), typing indicators, and instant simulation answers.
 
 ---
 
-## "Future You" Voice System
+## Design System & Tokens
 
-- **Read Aloud**: Browser-native Web Speech Synthesis (`window.speechSynthesis`).
-  - Automatically selects authentic Indian English voices (`en-IN`), falling back to `en-GB` or natural English.
-  - Sentence-by-sentence utterance queuing with keep-alive pulse to prevent Chrome's 15-second cut-off bug.
-  - Live sentence underline tracking in Marigold (`#994700`).
-  - Text controls: `Hear it from me`, `Pause`, `Resume`, `Stop`.
-  - Zero API cost, runs 100% locally on the device.
-- **Ask Future You (Voice & Text Q&A)**:
-  - Speech Recognition (`webkitSpeechRecognition` / `SpeechRecognition`) with `lang="en-IN"`.
-  - Suggested instant queries:
-    - *"Will I make it?"*
-    - *"What should I cut first?"*
-    - *"What if rent goes up ₹3,000?"*
-  - Pre-computed deterministic simulation answers: Immediate answers even without an AI key or network connection.
-  - Answers are automatically spoken aloud if asked via microphone.
+- **Palette**:
+  - Canvas: `#F6F4EF`
+  - Surface: `#FFFFFF`
+  - Border: `#E7E2D8`
+  - Ink: `#14201B`
+  - Muted: `#5E6B64`
+  - Primary Deep Green: `#0E5A44` (tint `#E6F2EC`)
+  - Accent Saffron: `#E8890C` (tint `#FDF1DD`)
+  - Danger: `#C0392B` (tint `#FBEAE7`)
+  - Success: `#1B7F5C`
+- **Typography**: Inter for all UI, Fraunces for editorial greetings and the Future You letter. Tabular numbers enabled across all numerical and currency displays.
+- **Controls & Radiuses**: Cards `14px`, controls `10px`, focus ring `2px` with `2px` offset.
 
 ---
 
 ## Privacy & Security Guarantees
 
-- **Stateless Backend**: Backend Route Handlers (`app/api/*`) are purely stateless. They do not maintain a database or external cache.
-- **Client-Side Ownership**: Transaction histories remain stored in the user's browser `localStorage`.
-- **Zero Raw Data to LLMs**: Neither full SMS messages, card numbers, nor transaction lists are ever sent to Gemini. Only minimal aggregated numbers (e.g. goal target, monthly net, category averages) are sent for letter phrasing.
+- **Zero-Cost & Database-Free**: No database, no paid services. State is maintained in browser `localStorage`.
+- **Stateless Backend**: Route handlers (`app/api/*`) are purely stateless, accepting data in request bodies (capped at 300 KB).
+- **Client-Side Privacy**: Raw SMS, account numbers, and complete transaction lists are never logged or sent to LLMs. Only aggregate summary figures are passed for letter generation.
+- **Graceful Fallback**: App remains 100% operational offline or when Gemini API keys are absent.
 
 ---
 
@@ -57,14 +92,14 @@ A zero-cost, private personal finance coach designed for Indian households. Buil
 ### 2. Setup
 1. Clone or navigate to the workspace:
    ```bash
+   git clone https://github.com/saiesh10/Munshi-Personal-Finance-Coach.git
    cd Munshi-Personal-Finance-Coach
    ```
 2. Copy the environment configuration:
    ```bash
    cp .env.example .env.local
    ```
-3. *(Optional)* Add a free Gemini API key from [Google AI Studio](https://aistudio.google.com/) (no credit card required).
-   > **Note on Model**: The default recommended model is `gemini-2.5-flash`.
+3. *(Optional)* Add a free Gemini API key from [Google AI Studio](https://aistudio.google.com/).
 4. Install dependencies:
    ```bash
    npm install
@@ -73,44 +108,25 @@ A zero-cost, private personal finance coach designed for Indian households. Buil
    ```bash
    npm run dev
    ```
-   Open [http://localhost:3000](http://localhost:3000) in Chrome or Edge.
+   Open [http://localhost:3000](http://localhost:3000).
 
 ---
 
 ## Testing
 
 ### Unit Test Suite (`node:test`)
-Run all 22 unit tests across the 7 modules:
+Run all 29 unit tests across 9 domain suites:
 ```bash
 npm test
 ```
 
-### Live Smoke Tests
-To test all 8 API endpoints against the running server:
+### Production Build Verification
 ```bash
-# In one terminal:
-npm run dev
-
-# In another terminal:
-npm run smoke
+npm run build
 ```
 
----
-
-## Manual Chrome Testing Checklist
-
-1. **Read Aloud (Text-to-Speech)**:
-   - Navigate to `05 Letter` and click "Write my letter".
-   - Click "Hear it from me".
-   - Verify that sentences highlight sequentially with a marigold underline as spoken.
-   - Click "Pause", verify playback halts, click "Resume", then "Stop".
-2. **Mic Question (Speech-to-Text)**:
-   - In Chrome or Edge, click "Speak". Allow microphone permissions when prompted.
-   - Say: *"Will I make it?"*
-   - Verify the state switches to "Listening…", transcripts appear in the input, and the answer is returned and spoken aloud automatically.
-3. **Typed Question & Suggestions**:
-   - Click the link *"What if rent goes up ₹3,000?"*.
-   - Verify the simulated answer shows the exact rupee impact on monthly net and projected goal delay.
-   - Click "Hear it" next to the answer to hear it on demand.
-4. **Unsupported Browser Fallback**:
-   - In Firefox or with speech disabled, verify "Speak" is cleanly hidden, typed input remains fully functional, and a message explains browser speech status without breaking layout.
+### End-to-End Smoke Tests
+Verify all 8 API endpoints on a live instance:
+```bash
+npm run smoke
+```
