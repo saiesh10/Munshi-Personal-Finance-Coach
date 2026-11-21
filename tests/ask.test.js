@@ -195,4 +195,41 @@ describe('Future You Voice & Ask Engine', () => {
     });
     assert.ok(hindiSavings.answer.includes('1,20,000') || hindiSavings.answer.includes('120000'), 'Should answer Hindi savings correctly');
   });
+
+  test('House vs Car purchase questions produce distinct, specific financial advice', async () => {
+    const resHouse = await answerFutureQuestion({
+      question: 'what if I want to buy a new house',
+      summary: mockSummary,
+      history: []
+    });
+
+    const resCar = await answerFutureQuestion({
+      question: 'what if I want to buy a new car',
+      summary: mockSummary,
+      history: []
+    });
+
+    // They must NOT be identical
+    assert.notEqual(resHouse.answer, resCar.answer, 'Answers for buying a house vs buying a car must be distinct');
+
+    // Neither should be the generic fallback
+    assert.equal(resHouse.answer.includes('convenience purchase'), false, 'Should not use generic convenience fallback for house');
+    assert.equal(resCar.answer.includes('convenience purchase'), false, 'Should not use generic convenience fallback for car');
+
+    // House answer must discuss home-specific financial concepts
+    assert.ok(
+      resHouse.answer.toLowerCase().includes('home') ||
+      resHouse.answer.toLowerCase().includes('house') ||
+      resHouse.answer.toLowerCase().includes('down payment'),
+      'House answer should discuss home purchase finances'
+    );
+
+    // Car answer must discuss car/vehicle-specific financial concepts
+    assert.ok(
+      resCar.answer.toLowerCase().includes('car') ||
+      resCar.answer.toLowerCase().includes('vehicle') ||
+      resCar.answer.toLowerCase().includes('emi'),
+      'Car answer should discuss vehicle purchase finances'
+    );
+  });
 });

@@ -187,8 +187,17 @@ export default function LetterTab() {
       };
 
       setConversation(prev => [...prev.slice(-2), newTurn]);
-      // Note: Answers are displayed cleanly in the conversation bubble.
-      // Voice only plays when the user explicitly clicks the "Hear it" / "सुनें" button.
+
+      // Speak answer automatically and articulate 3D model
+      if (ttsSupported) {
+        setSpeakingAnswerIndex(conversation.length);
+        setIsPlaying(false);
+        speak(res.answer, {
+          lang: language === 'hi' ? 'hi-IN' : 'en-IN',
+          rate: getNumericRate(),
+          onEnd: () => setSpeakingAnswerIndex(-1)
+        });
+      }
     } catch (err) {
       setAskError(
         err.message ||
