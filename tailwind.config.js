@@ -2,97 +2,65 @@
 module.exports = {
   content: [
     './app/**/*.{js,ts,jsx,tsx,mdx}',
-    './pages/**/*.{js,ts,jsx,tsx,mdx}',
     './components/**/*.{js,ts,jsx,tsx,mdx}',
     './lib/**/*.{js,ts,jsx,tsx,mdx}'
   ],
   theme: {
     extend: {
       colors: {
-        'surface-container-high': '#ede8dd',
-        'surface-variant': '#e7e2d7',
-        'on-primary-container': '#86837f',
-        'tertiary-fixed-dim': '#a2d2aa',
-        'on-secondary-fixed': '#321200',
-        'surface-bright': '#fef9ee',
-        'on-background': '#1d1c15',
-        'inverse-surface': '#323029',
-        'secondary': '#994700',
-        'marigold': '#c8651b',
-        'surface': '#fef9ee',
-        'surface-dim': '#dedacf',
-        'on-tertiary-fixed-variant': '#244f31',
-        'primary-container': '#1c1b18',
-        'inverse-on-surface': '#f5f0e5',
-        'surface-container-highest': '#e7e2d7',
-        'on-surface': '#1d1c15',
-        'on-secondary-fixed-variant': '#753400',
-        'primary-fixed': '#e6e2dd',
-        'surface-tint': '#605e5a',
-        'on-error-container': '#93000a',
-        'surface-container-lowest': '#ffffff',
-        'background': '#fef9ee',
-        'tertiary-fixed': '#bdeec5',
-        'surface-container': '#f2ede2',
-        'primary-fixed-dim': '#cac6c1',
-        'outline-variant': '#cac6bd',
-        'on-tertiary-container': '#618e6a',
-        'on-surface-variant': '#494740',
-        'on-tertiary-fixed': '#00210c',
-        'primary': '#000000',
-        'secondary-container': '#fd8e43',
-        'on-secondary-container': '#692f00',
-        'surface-container-low': '#f8f3e8',
-        'secondary-fixed-dim': '#ffb68b',
-        'inverse-primary': '#cac6c1',
-        'on-tertiary': '#ffffff',
-        'on-secondary': '#ffffff',
-        'tertiary-container': '#00210c',
-        'outline': '#7a776f',
-        'on-error': '#ffffff',
-        'secondary-fixed': '#ffdbc8',
-        'on-primary-fixed': '#1c1b18',
-        'error-container': '#ffdad6',
-        'on-primary-fixed-variant': '#484743',
-        'on-primary': '#ffffff',
-        'error': '#ba1a1a',
-        'moss': '#3f6b4a'
+        canvas: '#F6F4EF',
+        surface: '#FFFFFF',
+        border: '#E7E2D8',
+        ink: '#14201B',
+        muted: '#5E6B64',
+        faint: '#8A948E',
+        primary: {
+          DEFAULT: '#0E5A44',
+          hover: '#0A4936',
+          tint: '#E6F2EC'
+        },
+        accent: {
+          saffron: '#E8890C',
+          tint: '#FDF1DD'
+        },
+        danger: {
+          DEFAULT: '#C0392B',
+          tint: '#FBEAE7'
+        },
+        success: {
+          DEFAULT: '#1B7F5C',
+          tint: '#E6F2EC'
+        },
+        cat: {
+          food: '#E8890C',
+          groceries: '#5B8C3A',
+          transport: '#3A6EA5',
+          shopping: '#B04A7A',
+          bills: '#6B6F7A',
+          rent: '#8C5A3C',
+          subscriptions: '#7A4FB0',
+          health: '#C0392B',
+          entertainment: '#D0A100',
+          travel: '#1E8A8A',
+          education: '#4A5FC1',
+          income: '#1B7F5C',
+          transfers: '#8A948E',
+          other: '#A39E93'
+        }
       },
       borderRadius: {
-        DEFAULT: '0px',
-        sm: '0px',
-        md: '0px',
-        lg: '0px',
-        xl: '0px',
-        full: '9999px'
+        card: '14px',
+        control: '10px'
       },
-      spacing: {
-        'space-xs': '0.25rem',
-        margin: '1rem',
-        'space-xl': '2.5rem',
-        'gutter-desktop': '1.5rem',
-        'margin-desktop': '2.5rem',
-        'space-sm': '0.5rem',
-        gutter: '1rem',
-        'space-md': '1rem',
-        'space-lg': '1.5rem'
+      boxShadow: {
+        card: '0 1px 2px rgba(20, 32, 27, 0.06)',
+        lift: '0 4px 12px rgba(20, 32, 27, 0.08)'
       },
       fontFamily: {
-        'body-md': ['EB Garamond', 'serif'],
-        'body-lg': ['EB Garamond', 'serif'],
-        'tabular-md': ['JetBrains Mono', 'monospace'],
-        'body-sm': ['EB Garamond', 'serif'],
-        'headline-lg': ['EB Garamond', 'serif'],
-        kicker: ['JetBrains Mono', 'monospace'],
-        'headline-md': ['EB Garamond', 'serif'],
-        display: ['EB Garamond', 'serif'],
-        'headline-lg-mobile': ['EB Garamond', 'serif'],
-        'tabular-lg': ['JetBrains Mono', 'monospace'],
-        'tabular-sm': ['JetBrains Mono', 'monospace'],
-        'headline-sm': ['EB Garamond', 'serif'],
-        'display-mobile': ['EB Garamond', 'serif'],
-        'label-md': ['JetBrains Mono', 'monospace'],
-        fraunces: ['Fraunces', 'serif']
+        sans: ['var(--font-inter)', 'Inter', 'system-ui', 'sans-serif'],
+        serif: ['var(--font-fraunces)', 'Fraunces', 'serif'],
+        inter: ['var(--font-inter)', 'Inter', 'sans-serif'],
+        fraunces: ['var(--font-fraunces)', 'Fraunces', 'serif']
       }
     }
   },

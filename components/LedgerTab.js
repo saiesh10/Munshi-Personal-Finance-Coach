@@ -1,398 +1,652 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useLedger } from '@/context/LedgerContext';
+import {
+  Search,
+  Download,
+  Filter,
+  Check,
+  ChevronDown,
+  AlertCircle,
+  Copy,
+  CheckCheck,
+  Calendar,
+  FileText,
+  Building2,
+  Clock
+} from 'lucide-react';
+import { toast } from 'sonner';
+import Card from './ui/Card';
+import Button from './ui/Button';
+import Segmented from './ui/Segmented';
+import Chip from './ui/Chip';
+import Avatar from './ui/Avatar';
+import Badge from './ui/Badge';
+import Drawer from './ui/Drawer';
+import Popover from './ui/Popover';
+import CountUp from './ui/CountUp';
+import EmptyState from './ui/EmptyState';
+import { TableSkeleton } from './ui/Skeleton';
+import { formatRupees, getCategoryColor } from './ui/format';
 import { CATEGORIES } from '@/lib/engine/categories';
 
 export default function LedgerTab() {
-  const { transactions, setTransactions, rules, setRules, handleLearnRule, isLoading, error } = useLedger();
+  const {
+    transactions,
+    setTransactions,
+    rules,
+    setRules,
+    handleLearnRule,
+    isLoading,
+    setActiveTab
+  } = useLedger();
 
-  const [selectedMonth, setSelectedMonth] = useState('All');
-  const [filterType, setFilterType] = useState('all'); // all | debit | credit
   const [searchQuery, setSearchQuery] = useState('');
-  const [categoryFilter, setCategoryFilter] = useState('All');
-  const [expandedRowId, setExpandedRowId] = useState(null);
-  const [editingRowId, setEditingRowId] = useState(null);
-  const [customCategoryInput, setCustomCategoryInput] = useState('');
-  const [flashingRowIds, setFlashingRowIds] = useState(new Set());
+  const [selectedCategories, setSelectedCategories] = useState(new Set());
+  const [typeFilter, setTypeFilter] = useState('all'); // 'all' | 'debit' | 'credit'
+  const [visibleCount, setVisibleCount] = useState(50);
 
-  // Margin note & Undo state (lasts 8 seconds)
-  const [marginNote, setMarginNote] = useState(null); // { text, previousTxns, previousRules }
-  const noteTimerRef = useRef(null);
+  // Category Edit Popover State
+  const [editingTxnId, setEditingTxnId] = useState(null);
+  const [catSearch, setCatSearch] = useState('');
+  const [newCatInput, setNewCatInput] = useState('');
+  const [highlightedRowIds, setHighlightedRowIds] = useState(new Set());
 
-  // Extract unique available months from transactions
-  const availableMonths = React.useMemo(() => {
-    const months = new Set();
-    for (const t of transactions) {
-      if (t.date) {
-        try {
-          const d = new Date(t.date);
-          const mon = d.toLocaleString('en-US', { month: 'short' });
-          months.add(mon);
-        } catch {}
+  // Drawer Detail State
+  const [selectedTxn, setSelectedTxn] = useState(null);
+  const [isCopiedRaw, setIsCopiedRaw] = useState(false);
+
+  // Undo Timer Ref
+  const undoTimerRef = useRef(null);
+
+  // Filtered Transactions
+  const filtered = useMemo(() => {
+    return transactions.filter((t) => {
+      // Type Filter
+      if (typeFilter === 'debit' && t.direction !== 'debit') return false;
+      if (typeFilter === 'credit' && t.direction !== 'credit') return false;
+
+      // Category Filter
+      if (selectedCategories.size > 0 && !selectedCategories.has(t.category)) {
+        return false;
+      }
+
+      // Search Query
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        const matchMerchant = (t.merchant || '').toLowerCase().includes(q);
+        const matchCat = (t.category || '').toLowerCase().includes(q);
+        const matchRaw = (t.rawText || '').toLowerCase().includes(q);
+        if (!matchMerchant && !matchCat && !matchRaw) return false;
+      }
+
+      return true;
+    });
+  }, [transactions, typeFilter, selectedCategories, searchQuery]);
+
+  // Summary Strip Totals
+  const summary = useMemo(() => {
+    let moneyIn = 0;
+    let moneyOut = 0;
+
+    for (const t of filtered) {
+      if (t.direction === 'credit') {
+        moneyIn += t.amount || 0;
+      } else {
+        moneyOut += t.amount || 0;
       }
     }
-    return Array.from(months);
-  }, [transactions]);
 
-  // Filter transactions
-  const filtered = transactions.filter(t => {
-    // Month filter
-    if (selectedMonth !== 'All' && t.date) {
-      const d = new Date(t.date);
-      const mon = d.toLocaleString('en-US', { month: 'short' });
-      if (mon !== selectedMonth) return false;
-    }
+    return {
+      moneyIn,
+      moneyOut,
+      netLeft: moneyIn - moneyOut
+    };
+  }, [filtered]);
 
-    // Direction filter
-    if (filterType === 'debit' && t.direction !== 'debit') return false;
-    if (filterType === 'credit' && t.direction !== 'credit') return false;
+  // Client-side CSV export
+  const handleExportCsv = () => {
+    if (filtered.length === 0) return;
 
-    // Category filter
-    if (categoryFilter !== 'All' && t.category !== categoryFilter) return false;
+    const headers = ['Date', 'Merchant', 'Direction', 'Category', 'Amount (INR)', 'Raw Message'];
+    const rows = filtered.map(t => [
+      `"${t.date || ''}"`,
+      `"${(t.merchant || '').replace(/"/g, '""')}"`,
+      `"${t.direction}"`,
+      `"${t.category || 'Other'}"`,
+      t.amount,
+      `"${(t.rawText || '').replace(/"/g, '""')}"`
+    ]);
 
-    // Search query
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      const matchMerchant = (t.merchant || '').toLowerCase().includes(q);
-      const matchCat = (t.category || '').toLowerCase().includes(q);
-      const matchRaw = (t.rawText || '').toLowerCase().includes(q);
-      if (!matchMerchant && !matchCat && !matchRaw) return false;
-    }
+    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `munshi_ledger_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
-    return true;
-  });
+  // Toggle Category in Filter Popover
+  const toggleCategoryFilter = (cat) => {
+    setSelectedCategories((prev) => {
+      const next = new Set(prev);
+      if (next.has(cat)) next.delete(cat);
+      else next.add(cat);
+      return next;
+    });
+  };
 
-  // Calculate totals for active filtered set
-  const totalCredit = filtered
-    .filter(t => t.direction === 'credit')
-    .reduce((acc, t) => acc + (t.amount || 0), 0);
-
-  const totalDebit = filtered
-    .filter(t => t.direction === 'debit')
-    .reduce((acc, t) => acc + (t.amount || 0), 0);
-
-  const netBalance = totalCredit - totalDebit;
-
-  const handleCategorySelect = async (txn, newCategory) => {
+  // Learn Rule & Flash Rows
+  const handleSelectCategory = async (txn, newCategory) => {
     if (!newCategory || txn.category === newCategory) {
-      setEditingRowId(null);
+      setEditingTxnId(null);
       return;
     }
 
-    // Save snapshot for 8-second undo
-    const snapshotTxns = [...transactions];
-    const snapshotRules = [...rules];
+    const previousTxns = [...transactions];
+    const previousRules = [...rules];
+
+    setEditingTxnId(null);
+    setCatSearch('');
+    setNewCatInput('');
 
     const res = await handleLearnRule(txn, newCategory);
-    setEditingRowId(null);
-    setCustomCategoryInput('');
 
     if (res.success) {
-      const count = res.affectedCount || 0;
       const targetKey = txn.merchantKey;
+      const count = res.affectedCount || 0;
 
-      // Flash moss underline on affected rows
-      const affectedIds = new Set(
-        transactions
-          .filter(t => t.merchantKey === targetKey)
-          .map(t => t.id)
+      // Flash highlight on affected rows for 1.2s
+      const affected = new Set(
+        transactions.filter(t => t.merchantKey === targetKey).map(t => t.id)
       );
-      setFlashingRowIds(affectedIds);
-      setTimeout(() => setFlashingRowIds(new Set()), 2000);
+      setHighlightedRowIds(affected);
+      setTimeout(() => setHighlightedRowIds(new Set()), 1200);
 
-      // Margin note for 8 seconds
-      const noteText = `↳ Learned: ${txn.merchant} is ${newCategory}. Also fixed ${count} other ${count === 1 ? 'row' : 'rows'}.`;
-      setMarginNote({
-        text: noteText,
-        snapshotTxns,
-        snapshotRules
+      // Sonner Toast with 8s Undo
+      toast.success(`Learned: ${txn.merchant} is ${newCategory}. Updated ${count} more ${count === 1 ? 'row' : 'rows'}.`, {
+        duration: 8000,
+        action: {
+          label: 'Undo',
+          onClick: () => {
+            setTransactions(previousTxns);
+            setRules(previousRules);
+            toast('Reverted categorization changes');
+          }
+        }
       });
-
-      if (noteTimerRef.current) {
-        clearTimeout(noteTimerRef.current);
-      }
-      noteTimerRef.current = setTimeout(() => {
-        setMarginNote(null);
-      }, 8000);
     }
   };
 
-  const handleUndo = () => {
-    if (!marginNote) return;
-    setTransactions(marginNote.snapshotTxns);
-    setRules(marginNote.snapshotRules);
-    setMarginNote(null);
-    if (noteTimerRef.current) {
-      clearTimeout(noteTimerRef.current);
-    }
+  // Copy raw message in drawer
+  const handleCopyRaw = (text) => {
+    navigator.clipboard.writeText(text);
+    setIsCopiedRaw(true);
+    setTimeout(() => setIsCopiedRaw(false), 2000);
   };
+
+  // Mini list of other transactions for the drawer
+  const otherMerchantTxns = useMemo(() => {
+    if (!selectedTxn) return [];
+    return transactions
+      .filter(t => t.id !== selectedTxn.id && t.merchantKey === selectedTxn.merchantKey)
+      .slice(0, 5);
+  }, [selectedTxn, transactions]);
+
+  // Categories list for popover
+  const filteredCategoriesList = useMemo(() => {
+    if (!catSearch.trim()) return CATEGORIES;
+    return CATEGORIES.filter(c => c.toLowerCase().includes(catSearch.toLowerCase()));
+  }, [catSearch]);
+
+  const pagedTransactions = filtered.slice(0, visibleCount);
+
+  if (transactions.length === 0 && !isLoading) {
+    return (
+      <div className="py-12">
+        <EmptyState
+          title="The ledger is empty"
+          description="Bring your bank messages or statements on the Paste tab to start tracking."
+          primaryAction={{
+            label: 'Go to Paste',
+            onClick: () => setActiveTab('paste')
+          }}
+        />
+      </div>
+    );
+  }
 
   return (
-    <div className="flex flex-col w-full pb-12">
-      {/* Top Header & Kicker */}
-      <div className="flex items-center justify-between pb-space-sm">
-        <span className="font-kicker text-kicker uppercase text-on-surface-variant tracking-[0.16em]">
-          02 / LEDGER
-        </span>
-        <span className="font-label-md text-label-md text-on-surface-variant flex items-center gap-1.5">
-          <span className="inline-block w-1.5 h-1.5 bg-secondary"></span>
-          CHRONOLOGICAL JOURNAL
-        </span>
-      </div>
-
+    <div className="flex flex-col gap-5 w-full pb-16">
       {/* Editorial Headline */}
-      <div className="pt-space-xs pb-space-xs">
-        <h1 className="font-['Fraunces'] text-[36px] leading-[40px] tracking-tight font-normal text-on-surface">
+      <div className="flex flex-col gap-1">
+        <h2 className="font-serif text-[28px] font-normal text-ink leading-tight">
           The Books.
-        </h1>
-        <p className="font-['Fraunces'] italic text-body-lg text-on-surface-variant pt-space-xs">
-          Every rupee accounted for. Fix a category, and Munshi remembers it forever.
+        </h2>
+        <p className="text-[14px] text-muted">
+          Every rupee accounted for. Fix a category once, and Munshi remembers it across every transaction.
         </p>
       </div>
 
-      {/* Summary Sentence Strip */}
-      <div className="py-space-xs mb-space-sm font-tabular-md text-tabular-md text-on-surface border-b border-outline-variant/60 flex items-center gap-2">
-        <span>In <strong className="text-[#244f31] font-medium font-mono">₹{totalCredit.toLocaleString('en-IN')}</strong></span>
-        <span>·</span>
-        <span>Out <strong className="text-primary font-medium font-mono">₹{totalDebit.toLocaleString('en-IN')}</strong></span>
-        <span>·</span>
-        <span>Left <strong className={`font-medium font-mono ${netBalance >= 0 ? 'text-[#244f31]' : 'text-secondary'}`}>
-          {netBalance < 0 ? '-' : ''}₹{Math.abs(netBalance).toLocaleString('en-IN')}
-        </strong></span>
-      </div>
-
-      {/* Margin Note with 8-second Undo */}
-      {marginNote && (
-        <div
-          className="bg-surface-container-high p-space-sm mb-space-sm flex items-center justify-between"
-          style={{ borderLeft: '3px solid #244f31', border: '1px solid #cac6bd' }}
-        >
-          <span className="font-tabular-sm text-tabular-sm text-on-surface font-mono">
-            {marginNote.text}
+      {/* Summary Strip: Three Compact Cards with Count-up */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <Card className="p-4 flex items-center justify-between">
+          <div>
+            <span className="text-[12px] font-medium text-muted block mb-0.5">Money in</span>
+            <div className="text-[22px] font-semibold text-success tabular-nums">
+              <CountUp value={summary.moneyIn} prefix="₹" />
+            </div>
+          </div>
+          <span className="text-[12px] font-medium text-success bg-primary-tint px-2 py-0.5 rounded-full">
+            Credits
           </span>
-          <button
-            type="button"
-            onClick={handleUndo}
-            className="font-label-md text-label-md uppercase tracking-wider text-secondary underline underline-offset-4 decoration-secondary hover:text-on-secondary-fixed cursor-pointer ml-3 shrink-0"
-          >
-            Undo
-          </button>
-        </div>
-      )}
+        </Card>
 
-      {/* Error notification if any */}
-      {error && (
-        <div
-          className="bg-surface-container-high p-space-sm mb-space-sm flex items-center gap-2 text-error"
-          style={{ borderLeft: '3px solid #ba1a1a', border: '1px solid #cac6bd' }}
-        >
-          <span className="font-tabular-sm text-tabular-sm">{error}</span>
-        </div>
-      )}
+        <Card className="p-4 flex items-center justify-between">
+          <div>
+            <span className="text-[12px] font-medium text-muted block mb-0.5">Money out</span>
+            <div className="text-[22px] font-semibold text-ink tabular-nums">
+              <CountUp value={summary.moneyOut} prefix="₹" />
+            </div>
+          </div>
+          <span className="text-[12px] font-medium text-muted bg-canvas px-2 py-0.5 rounded-full">
+            Debits
+          </span>
+        </Card>
 
-      {/* Month Links & Filter Strip */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-space-sm py-space-xs mb-space-xs">
-        {/* Month Links (Aug · Sep · Oct · Nov · All) */}
-        <div className="flex items-center gap-2 flex-wrap font-tabular-sm text-tabular-sm">
-          {availableMonths.map(mon => (
-            <React.Fragment key={mon}>
-              <button
-                type="button"
-                onClick={() => setSelectedMonth(mon)}
-                className={`cursor-pointer transition-colors ${
-                  selectedMonth === mon
-                    ? 'text-primary font-semibold underline underline-offset-4 decoration-secondary'
-                    : 'text-on-surface-variant hover:text-on-surface'
-                }`}
-              >
-                {mon}
-              </button>
-              <span>·</span>
-            </React.Fragment>
-          ))}
-          <button
-            type="button"
-            onClick={() => setSelectedMonth('All')}
-            className={`cursor-pointer transition-colors ${
-              selectedMonth === 'All'
-                ? 'text-primary font-semibold underline underline-offset-4 decoration-secondary'
-                : 'text-on-surface-variant hover:text-on-surface'
-            }`}
-          >
-            All
-          </button>
-        </div>
-
-        {/* Category & Search Controls */}
-        <div className="flex items-center gap-2 flex-wrap">
-          <select
-            value={categoryFilter}
-            onChange={(e) => setCategoryFilter(e.target.value)}
-            className="bg-surface border border-outline-variant font-tabular-sm text-tabular-sm px-2 py-1 text-on-surface focus:outline-none cursor-pointer"
-            style={{ borderRadius: 0 }}
-          >
-            <option value="All">All Categories</option>
-            {CATEGORIES.map(cat => (
-              <option key={cat} value={cat}>{cat}</option>
-            ))}
-          </select>
-
-          <input
-            type="text"
-            placeholder="Search merchant or text..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="bg-surface border border-outline-variant font-tabular-sm text-tabular-sm px-2 py-1 text-on-surface focus:outline-none w-36 sm:w-44"
-            style={{ borderRadius: 0 }}
-          />
-        </div>
+        <Card className="p-4 flex items-center justify-between">
+          <div>
+            <span className="text-[12px] font-medium text-muted block mb-0.5">Net left</span>
+            <div className={`text-[22px] font-semibold tabular-nums ${summary.netLeft >= 0 ? 'text-ink' : 'text-danger'}`}>
+              <CountUp value={summary.netLeft} prefix="₹" />
+            </div>
+          </div>
+          <span className="text-[12px] font-medium text-primary bg-primary-tint px-2 py-0.5 rounded-full">
+            Margin
+          </span>
+        </Card>
       </div>
 
-      {/* The Core Bahi-Khata Ledger Table */}
-      <div
-        className="bg-surface-container-lowest overflow-x-auto border border-outline-variant"
-        style={{ borderRadius: 0 }}
-      >
-        <table className="w-full text-left border-collapse">
-          <thead>
-            <tr
-              className="border-b-2 border-outline-variant font-kicker text-kicker uppercase text-on-surface-variant bg-surface-container-high"
-              style={{ borderBottom: '3px double #cac6bd' }}
-            >
-              <th className="p-3 w-28">Date</th>
-              <th className="p-3">Merchant</th>
-              <th className="p-3 w-52">Category</th>
-              <th className="p-3 w-36 text-right">Amount</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-outline-variant/60 font-tabular-sm text-tabular-sm">
-            {transactions.length === 0 ? (
-              <tr>
-                <td colSpan={4} className="p-10 text-center text-on-surface-variant italic font-body-md">
-                  The books are empty. Paste some texts first on the 01 Paste tab.
-                </td>
-              </tr>
-            ) : filtered.length === 0 ? (
-              <tr>
-                <td colSpan={4} className="p-10 text-center text-on-surface-variant italic font-body-md">
-                  No transactions match the selected filters.
-                </td>
-              </tr>
-            ) : (
-              filtered.map((t) => {
-                const isDebit = t.direction === 'debit';
-                const isExpanded = expandedRowId === t.id;
-                const isEditing = editingRowId === t.id;
-                const isFlashing = flashingRowIds.has(t.id);
-                const isAmbiguous = t.categorySource === 'unsure' || t.category === 'Other';
+      {/* Sticky Toolbar */}
+      <Card className="p-3 sticky top-16 z-20 backdrop-blur-md bg-surface/95 flex flex-wrap items-center justify-between gap-3">
+        {/* Left Side: Search + Category Filter */}
+        <div className="flex flex-wrap items-center gap-2 flex-1 min-w-[260px]">
+          {/* Search Input */}
+          <div className="relative flex-1 min-w-[180px] max-w-sm">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted pointer-events-none stroke-[1.75]" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search merchant, category, or note..."
+              className="w-full bg-canvas border border-border rounded-control h-9 pl-9 pr-3 text-[13px] text-ink placeholder:text-muted/60 focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary transition-all"
+            />
+          </div>
 
-                return (
-                  <React.Fragment key={t.id}>
+          {/* Category Multi-Filter Popover */}
+          <Popover
+            trigger={
+              <Button variant="outline" size="sm" icon={Filter}>
+                <span>Category</span>
+                {selectedCategories.size > 0 && (
+                  <span className="w-4 h-4 rounded-full bg-primary text-white text-[10px] flex items-center justify-center font-bold">
+                    {selectedCategories.size}
+                  </span>
+                )}
+              </Button>
+            }
+          >
+            {() => (
+              <div className="w-64 max-h-72 overflow-y-auto no-scrollbar p-1 space-y-1">
+                <div className="flex items-center justify-between px-2 py-1 text-[12px] font-semibold text-muted border-b border-border">
+                  <span>Filter categories</span>
+                  {selectedCategories.size > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedCategories(new Set())}
+                      className="text-primary hover:underline cursor-pointer"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+                {CATEGORIES.map((cat) => {
+                  const isChecked = selectedCategories.has(cat);
+                  const color = getCategoryColor(cat);
+                  return (
+                    <label
+                      key={cat}
+                      className="flex items-center gap-2.5 px-2 py-1.5 rounded-control text-[13px] text-ink hover:bg-canvas cursor-pointer select-none"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={() => toggleCategoryFilter(cat)}
+                        className="rounded accent-primary w-4 h-4"
+                      />
+                      <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: color }} />
+                      <span className="truncate">{cat}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            )}
+          </Popover>
+        </div>
+
+        {/* Right Side: Type Filter + Export CSV */}
+        <div className="flex items-center gap-2">
+          <Segmented
+            size="sm"
+            options={[
+              { value: 'all', label: 'All' },
+              { value: 'debit', label: 'Money out' },
+              { value: 'credit', label: 'Money in' }
+            ]}
+            value={typeFilter}
+            onChange={setTypeFilter}
+            name="ledger-type"
+          />
+
+          <Button
+            variant="ghost"
+            size="sm"
+            icon={Download}
+            onClick={handleExportCsv}
+            disabled={filtered.length === 0}
+          >
+            Export CSV
+          </Button>
+        </div>
+      </Card>
+
+      {/* Transactions Table Card */}
+      <Card className="p-0 overflow-hidden">
+        {isLoading ? (
+          <div className="p-4">
+            <TableSkeleton rows={8} />
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="p-12 text-center">
+            <p className="text-[14px] text-muted">No transactions match your search or filters.</p>
+            <Button
+              variant="outline"
+              size="sm"
+              className="mt-3"
+              onClick={() => {
+                setSearchQuery('');
+                setSelectedCategories(new Set());
+                setTypeFilter('all');
+              }}
+            >
+              Reset filters
+            </Button>
+          </div>
+        ) : (
+          <div className="w-full overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="border-b border-border bg-canvas/50 text-[12px] font-medium text-muted uppercase tracking-wider">
+                  <th className="py-2.5 px-4">Merchant &amp; date</th>
+                  <th className="py-2.5 px-4">Category</th>
+                  <th className="py-2.5 px-4 text-right">Amount</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {pagedTransactions.map((txn) => {
+                  const isCredit = txn.direction === 'credit';
+                  const isUnsure = txn.category === 'unsure' || txn.categorySource === 'unsure' || txn.category === 'Other';
+                  const isHighlighted = highlightedRowIds.has(txn.id);
+
+                  return (
                     <tr
-                      className={`hover:bg-surface-container-low transition-colors ${
-                        isFlashing ? 'border-b-2 border-[#244f31] bg-surface-container-low' : ''
+                      key={txn.id}
+                      className={`h-[56px] transition-colors duration-150 ${
+                        isHighlighted
+                          ? 'bg-primary-tint/70'
+                          : isUnsure
+                          ? 'bg-accent-tint/30 hover:bg-accent-tint/50'
+                          : 'hover:bg-canvas/50'
                       }`}
                     >
-                      {/* Date */}
-                      <td className="p-3 whitespace-nowrap text-on-surface-variant font-mono">
-                        {t.date}
-                      </td>
-
-                      {/* Merchant (Clickable to reveal raw SMS) */}
-                      <td className="p-3">
-                        <button
-                          type="button"
-                          onClick={() => setExpandedRowId(isExpanded ? null : t.id)}
-                          className="text-left font-medium text-on-surface hover:text-secondary underline decoration-dotted underline-offset-4 cursor-pointer"
-                        >
-                          {t.merchant}
-                        </button>
-                      </td>
-
-                      {/* Category (Clickable to pick or type custom) */}
-                      <td className="p-3">
-                        {isEditing ? (
-                          <div className="flex flex-col gap-1">
-                            <select
-                              value={CATEGORIES.includes(t.category) ? t.category : 'Other'}
-                              onChange={(e) => {
-                                if (e.target.value === 'Other') {
-                                  // Keep editing open for custom input
-                                } else {
-                                  handleCategorySelect(t, e.target.value);
-                                }
-                              }}
-                              className="bg-surface border border-primary p-1 font-tabular-sm text-tabular-sm text-on-surface"
-                              style={{ borderRadius: 0 }}
-                              autoFocus
-                            >
-                              {CATEGORIES.map(cat => (
-                                <option key={cat} value={cat}>{cat}</option>
-                              ))}
-                            </select>
-                            <div className="flex items-center gap-1 mt-1">
-                              <input
-                                type="text"
-                                placeholder="Or type custom..."
-                                value={customCategoryInput}
-                                onChange={(e) => setCustomCategoryInput(e.target.value)}
-                                className="bg-surface border border-outline-variant p-1 font-tabular-sm text-[12px] w-full"
-                              />
-                              <button
-                                type="button"
-                                disabled={!customCategoryInput.trim()}
-                                onClick={() => handleCategorySelect(t, customCategoryInput.trim())}
-                                className="px-2 py-1 bg-primary text-surface font-label-md text-[10px] uppercase cursor-pointer"
-                              >
-                                Save
-                              </button>
-                            </div>
+                      {/* Merchant Avatar + Name + Date */}
+                      <td
+                        onClick={() => setSelectedTxn(txn)}
+                        className="py-2 px-4 cursor-pointer"
+                      >
+                        <div className="flex items-center gap-3">
+                          <Avatar name={txn.merchant} category={txn.category} size="md" />
+                          <div className="flex flex-col">
+                            <span className="text-[14px] font-medium text-ink leading-snug hover:underline">
+                              {txn.merchant}
+                            </span>
+                            <span className="text-[12px] text-muted leading-none">
+                              {txn.date ? new Date(txn.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Unknown date'}
+                            </span>
                           </div>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setEditingRowId(t.id);
-                              setCustomCategoryInput('');
-                            }}
-                            className={`text-left cursor-pointer transition-colors ${
-                              isAmbiguous
-                                ? 'text-secondary font-mono italic underline decoration-secondary underline-offset-2'
-                                : 'text-on-surface hover:text-secondary'
-                            }`}
-                          >
-                            {isAmbiguous ? 'unsure, tap to set' : t.category}
-                          </button>
-                        )}
+                        </div>
                       </td>
 
-                      {/* Amount */}
-                      <td className="p-3 text-right whitespace-nowrap font-medium font-mono">
-                        <span className={isDebit ? 'text-primary' : 'text-[#244f31]'}>
-                          {isDebit ? '' : '+ '}₹{Number(t.amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                      {/* Category Chip with Popover Combobox */}
+                      <td className="py-2 px-4">
+                        <Popover
+                          isOpen={editingTxnId === txn.id}
+                          onOpenChange={(open) => setEditingTxnId(open ? txn.id : null)}
+                          trigger={
+                            <div className="flex items-center gap-2">
+                              <Chip
+                                label={txn.category}
+                                category={txn.category}
+                                interactive
+                                showChevron
+                                active={editingTxnId === txn.id}
+                              />
+                              {isUnsure && (
+                                <Badge variant="saffron" dot dotColor="#E8890C">
+                                  Needs a category
+                                </Badge>
+                              )}
+                            </div>
+                          }
+                        >
+                          {({ close }) => (
+                            <div className="w-64 p-2 flex flex-col gap-2">
+                              {/* Search category */}
+                              <div className="relative">
+                                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted pointer-events-none" />
+                                <input
+                                  type="text"
+                                  autoFocus
+                                  value={catSearch}
+                                  onChange={(e) => setCatSearch(e.target.value)}
+                                  placeholder="Search or pick category..."
+                                  className="w-full bg-canvas border border-border rounded-control h-8 pl-8 pr-2 text-[12px] text-ink focus:outline-none focus:ring-1 focus:ring-primary"
+                                />
+                              </div>
+
+                              {/* Category List */}
+                              <div className="max-h-52 overflow-y-auto no-scrollbar space-y-0.5">
+                                {filteredCategoriesList.map((cat) => {
+                                  const color = getCategoryColor(cat);
+                                  const isSelected = txn.category === cat;
+                                  return (
+                                    <button
+                                      key={cat}
+                                      type="button"
+                                      onClick={() => handleSelectCategory(txn, cat)}
+                                      className={`w-full flex items-center justify-between px-2 py-1.5 rounded-control text-[13px] text-left transition-colors cursor-pointer ${
+                                        isSelected ? 'bg-primary-tint text-primary font-semibold' : 'hover:bg-canvas text-ink'
+                                      }`}
+                                    >
+                                      <div className="flex items-center gap-2 truncate">
+                                        <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: color }} />
+                                        <span className="truncate">{cat}</span>
+                                      </div>
+                                      {isSelected && <Check className="w-3.5 h-3.5 text-primary" />}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+
+                              {/* Create a category option */}
+                              <div className="pt-2 border-t border-border flex items-center gap-1.5">
+                                <input
+                                  type="text"
+                                  value={newCatInput}
+                                  onChange={(e) => setNewCatInput(e.target.value)}
+                                  placeholder="New category..."
+                                  className="flex-1 bg-canvas border border-border rounded-control h-7 px-2 text-[12px] text-ink focus:outline-none"
+                                />
+                                <Button
+                                  variant="primary"
+                                  size="sm"
+                                  disabled={!newCatInput.trim()}
+                                  onClick={() => handleSelectCategory(txn, newCatInput.trim())}
+                                  className="h-7 px-2 text-[11px]"
+                                >
+                                  Add
+                                </Button>
+                              </div>
+                            </div>
+                          )}
+                        </Popover>
+                      </td>
+
+                      {/* Right-aligned Amount */}
+                      <td
+                        onClick={() => setSelectedTxn(txn)}
+                        className="py-2 px-4 text-right cursor-pointer"
+                      >
+                        <span
+                          className={`text-[15px] font-semibold tabular-nums ${
+                            isCredit ? 'text-success' : 'text-ink'
+                          }`}
+                        >
+                          {formatRupees(txn.amount, { showPlus: isCredit })}
                         </span>
                       </td>
                     </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
 
-                    {/* Expandable Original SMS Drawer */}
-                    {isExpanded && t.rawText && (
-                      <tr className="bg-surface-container">
-                        <td colSpan={4} className="p-3 pl-8 text-on-surface-variant font-mono text-[12px] border-b border-outline-variant/60">
-                          <span className="font-kicker text-kicker uppercase text-secondary block mb-0.5">
-                            Original Bank Intimation:
-                          </span>
-                          <code>"{t.rawText}"</code>
-                        </td>
-                      </tr>
-                    )}
-                  </React.Fragment>
-                );
-              })
+        {/* Pagination Strip (50 per page) */}
+        {filtered.length > visibleCount && (
+          <div className="p-4 border-t border-border flex items-center justify-center bg-canvas/30">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setVisibleCount((prev) => prev + 50)}
+            >
+              Show more ({filtered.length - visibleCount} remaining)
+            </Button>
+          </div>
+        )}
+      </Card>
+
+      {/* Right-Hand Drawer for Transaction Details */}
+      <Drawer
+        isOpen={Boolean(selectedTxn)}
+        onClose={() => setSelectedTxn(null)}
+        title={selectedTxn?.merchant || 'Transaction details'}
+        subtitle="Full statement entry and audit trail"
+      >
+        {selectedTxn && (
+          <div className="flex flex-col gap-6">
+            {/* Amount Banner */}
+            <div className="p-4 bg-canvas rounded-card border border-border flex items-center justify-between">
+              <div>
+                <span className="text-[12px] text-muted block mb-0.5">Amount</span>
+                <span className={`text-[24px] font-semibold tabular-nums ${selectedTxn.direction === 'credit' ? 'text-success' : 'text-ink'}`}>
+                  {formatRupees(selectedTxn.amount, { showPlus: selectedTxn.direction === 'credit' })}
+                </span>
+              </div>
+              <Badge variant={selectedTxn.direction === 'credit' ? 'success' : 'default'}>
+                {selectedTxn.direction === 'credit' ? 'Credit / Income' : 'Debit / Outflow'}
+              </Badge>
+            </div>
+
+            {/* Metadata Grid */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between text-[13px] py-1 border-b border-border">
+                <span className="text-muted flex items-center gap-1.5">
+                  <Calendar className="w-4 h-4" /> Date
+                </span>
+                <span className="font-medium text-ink">
+                  {selectedTxn.date ? new Date(selectedTxn.date).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' }) : 'Unknown'}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between text-[13px] py-1 border-b border-border">
+                <span className="text-muted flex items-center gap-1.5">
+                  <Building2 className="w-4 h-4" /> Category
+                </span>
+                <Chip label={selectedTxn.category} category={selectedTxn.category} />
+              </div>
+
+              <div className="flex items-center justify-between text-[13px] py-1 border-b border-border">
+                <span className="text-muted flex items-center gap-1.5">
+                  <Clock className="w-4 h-4" /> Source
+                </span>
+                <span className="font-medium text-ink capitalize">
+                  {selectedTxn.categorySource || 'keyword'}
+                </span>
+              </div>
+            </div>
+
+            {/* Original SMS / Message */}
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[13px] font-medium text-ink flex items-center gap-1.5">
+                  <FileText className="w-4 h-4 text-muted" /> Original message
+                </span>
+                <button
+                  type="button"
+                  onClick={() => handleCopyRaw(selectedTxn.rawText || '')}
+                  className="text-[12px] font-medium text-primary hover:underline flex items-center gap-1 cursor-pointer"
+                >
+                  {isCopiedRaw ? <CheckCheck className="w-3.5 h-3.5 text-success" /> : <Copy className="w-3.5 h-3.5" />}
+                  <span>{isCopiedRaw ? 'Copied' : 'Copy'}</span>
+                </button>
+              </div>
+
+              <div className="p-3 bg-canvas border border-border rounded-control font-mono text-[12px] text-ink leading-relaxed break-words">
+                {selectedTxn.rawText || 'No raw string available.'}
+              </div>
+            </div>
+
+            {/* Mini List: Other transactions from this merchant */}
+            {otherMerchantTxns.length > 0 && (
+              <div className="flex flex-col gap-2 pt-2 border-t border-border">
+                <span className="text-[13px] font-medium text-ink">
+                  Other transactions from {selectedTxn.merchant}
+                </span>
+
+                <div className="divide-y divide-border border border-border rounded-control overflow-hidden">
+                  {otherMerchantTxns.map((t) => (
+                    <div
+                      key={t.id}
+                      onClick={() => setSelectedTxn(t)}
+                      className="p-2.5 bg-surface hover:bg-canvas flex items-center justify-between text-[13px] cursor-pointer transition-colors"
+                    >
+                      <span className="text-muted">{t.date}</span>
+                      <span className="font-medium text-ink tabular-nums">
+                        {formatRupees(t.amount)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
             )}
-          </tbody>
-        </table>
-      </div>
+          </div>
+        )}
+      </Drawer>
     </div>
   );
 }

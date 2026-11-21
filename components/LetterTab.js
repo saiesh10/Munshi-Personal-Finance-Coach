@@ -2,9 +2,27 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useLedger } from '@/context/LedgerContext';
+import {
+  Play,
+  Pause,
+  RotateCcw,
+  Download,
+  Mic,
+  Send,
+  Sparkles,
+  Volume2,
+  CheckCircle2,
+  Loader2
+} from 'lucide-react';
+import Card from './ui/Card';
+import Button from './ui/Button';
+import Segmented from './ui/Segmented';
+import Select from './ui/Select';
+import Skeleton from './ui/Skeleton';
 import { isSupported as isTtsSupported, speak, pause, resume, stop, splitSentences } from '@/lib/voice';
 import { isSupported as isSttSupported, listen, stopListening } from '@/lib/stt';
 import { askFuture } from '@/lib/client';
+import { formatRupees } from './ui/format';
 
 export default function LetterTab() {
   const {
@@ -18,19 +36,19 @@ export default function LetterTab() {
 
   // TTS State
   const [ttsSupported, setTtsSupported] = useState(false);
-  const [isSpeakingLetter, setIsSpeakingLetter] = useState(false);
-  const [isPausedLetter, setIsPausedLetter] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
   const [activeSentenceIndex, setActiveSentenceIndex] = useState(-1);
+  const [speed, setSpeed] = useState('1x');
+  const [voiceTone, setVoiceTone] = useState('Warm');
 
   // STT & Ask State
   const [sttSupported, setSttSupported] = useState(false);
-  const [sttState, setSttState] = useState('idle'); // idle | listening | error
+  const [sttState, setSttState] = useState('idle'); // 'idle' | 'listening' | 'error'
   const [questionInput, setQuestionInput] = useState('');
-  const [conversation, setConversation] = useState([]); // Array of { q, a, source } (max 3)
+  const [conversation, setConversation] = useState([]);
   const [isAsking, setIsAsking] = useState(false);
   const [askError, setAskError] = useState(null);
-
-  const usedMicForLastQuestionRef = useRef(false);
 
   useEffect(() => {
     setTtsSupported(isTtsSupported());
@@ -42,46 +60,53 @@ export default function LetterTab() {
     };
   }, []);
 
-  // Split letter body into sentences for sequential highlight
   const letterSentences = letter?.text ? splitSentences(letter.text) : [];
 
-  // Read Aloud Handlers
-  const handleHearLetter = () => {
+  // Play Letter Audio from sentence index
+  const handlePlayFromIndex = (startIndex = 0) => {
     if (!letter?.text || !ttsSupported) return;
-    setIsSpeakingLetter(true);
-    setIsPausedLetter(false);
-    setActiveSentenceIndex(0);
 
-    speak(letter.text, {
+    setIsPlaying(true);
+    setIsPaused(false);
+    setActiveSentenceIndex(startIndex);
+
+    // If starting from a specific sentence, speak from that sentence onward
+    const textToSpeak = startIndex > 0 ? letterSentences.slice(startIndex).join(' ') : letter.text;
+
+    speak(textToSpeak, {
       onSentence: (idx) => {
-        setActiveSentenceIndex(idx);
+        setActiveSentenceIndex(startIndex + idx);
       },
       onEnd: () => {
-        setIsSpeakingLetter(false);
-        setIsPausedLetter(false);
+        setIsPlaying(false);
+        setIsPaused(false);
         setActiveSentenceIndex(-1);
       }
     });
   };
 
-  const handlePauseSpeech = () => {
-    pause();
-    setIsPausedLetter(true);
+  const handleTogglePlay = () => {
+    if (isPlaying) {
+      if (isPaused) {
+        resume();
+        setIsPaused(false);
+      } else {
+        pause();
+        setIsPaused(true);
+      }
+    } else {
+      handlePlayFromIndex(0);
+    }
   };
 
-  const handleResumeSpeech = () => {
-    resume();
-    setIsPausedLetter(false);
-  };
-
-  const handleStopSpeech = () => {
+  const handleStop = () => {
     stop();
-    setIsSpeakingLetter(false);
-    setIsPausedLetter(false);
+    setIsPlaying(false);
+    setIsPaused(false);
     setActiveSentenceIndex(-1);
   };
 
-  // Build current summary object for /api/ask
+  // Build summary payload for /api/ask
   const buildCurrentSummary = () => {
     return {
       goalName: goal?.name || 'Financial Goal',
@@ -104,17 +129,15 @@ export default function LetterTab() {
     };
   };
 
-  // Submit question to Future You
+  // Ask Question Handler
   const submitQuestion = async (queryText, usedMic = false) => {
     const q = queryText.trim();
     if (!q || isAsking) return;
 
     setIsAsking(true);
     setAskError(null);
-    usedMicForLastQuestionRef.current = usedMic;
     setQuestionInput('');
 
-    // Prepare previous history (max 3 turns)
     const historyPayload = conversation.slice(-3).map(turn => ({ q: turn.q, a: turn.a }));
     const summary = buildCurrentSummary();
 
@@ -133,12 +156,11 @@ export default function LetterTab() {
 
       setConversation(prev => [...prev.slice(-2), newTurn]);
 
-      // Automatically speak answer ONLY if the question was spoken via mic
       if (usedMic && ttsSupported) {
         speak(res.answer);
       }
     } catch (err) {
-      setAskError(err.message || 'Future You could not answer right now.');
+      setAskError(err.message || 'Future You could not respond right now.');
     } finally {
       setIsAsking(false);
     }
@@ -159,211 +181,258 @@ export default function LetterTab() {
       },
       onError: (err) => {
         setSttState('idle');
-        setAskError(typeof err === 'string' ? err : 'Speech could not be recognized. You can type below.');
+        setAskError(typeof err === 'string' ? err : 'Could not hear speech. Please type your question.');
       },
-      onEnd: () => {
-        setSttState('idle');
-      },
-      onStateChange: (state) => {
-        setSttState(state);
-      }
+      onEnd: () => setSttState('idle'),
+      onStateChange: (state) => setSttState(state)
     });
   };
 
-  const handleSpeakAnswer = (answerText) => {
+  const handleSpeakAnswer = (text) => {
     if (!ttsSupported) return;
-    speak(answerText);
+    speak(text);
   };
 
-  const wordCount = letter?.text ? letter.text.trim().split(/\s+/).filter(Boolean).length : 0;
+  // Mock audio download trigger
+  const handleDownloadAudio = () => {
+    if (!letter?.text) return;
+    const blob = new Blob([letter.text], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `future_you_letter_${new Date().toISOString().slice(0, 10)}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   return (
-    <div className="flex flex-col w-full pb-16">
-      {/* Top Header & Kicker */}
-      <div className="flex items-center justify-between pb-space-sm">
-        <span className="font-kicker text-kicker uppercase text-on-surface-variant tracking-[0.16em]">
-          05 / LETTER
-        </span>
-        <span className="font-label-md text-label-md text-on-surface-variant flex items-center gap-1.5">
-          <span className="inline-block w-1.5 h-1.5 bg-secondary"></span>
-          PROJECTION TESTIMONY
-        </span>
-      </div>
+    <div className="flex flex-col gap-8 w-full max-w-3xl mx-auto pb-20">
+      {/* Hero Section with Centered 120px CSS Orb */}
+      <div className="flex flex-col items-center justify-center text-center pt-4">
+        {/* The 120px Animated Orb */}
+        <div className="relative w-[120px] h-[120px] mb-6 flex items-center justify-center">
+          <div
+            className={`w-[120px] h-[120px] rounded-full bg-gradient-to-tr from-primary via-[#1B7F5C] to-accent-saffron transition-all duration-500 ${
+              isPlaying && !isPaused ? 'animate-orb-active' : 'animate-orb-idle'
+            }`}
+          />
+          <div className="absolute w-[100px] h-[100px] rounded-full bg-surface/20 backdrop-blur-sm flex items-center justify-center text-white">
+            <Sparkles className="w-8 h-8 opacity-90 stroke-[1.75]" />
+          </div>
+        </div>
 
-      {/* Editorial Headline */}
-      <div className="pt-space-xs pb-space-md">
-        <h1 className="font-['Fraunces'] text-[36px] leading-[40px] tracking-tight font-normal text-on-surface">
-          Future You.
-        </h1>
-        <p className="font-['Fraunces'] italic text-body-lg text-on-surface-variant pt-space-xs">
-          Once a month, I'll write to you as the person you're becoming.
+        <h2 className="font-serif text-[38px] sm:text-[40px] font-normal text-ink leading-tight">
+          Future You
+        </h2>
+        <p className="text-[15px] text-muted mt-1 max-w-md">
+          Hear from the person you're becoming. A dispatch from your arrival date.
         </p>
       </div>
 
-      {/* Inline Marigold Error */}
-      {letterError && (
-        <div
-          className="bg-surface-container-high p-space-sm mb-space-md text-error flex items-center gap-2"
-          style={{ borderLeft: '3px solid #994700', border: '1px solid #cac6bd' }}
-        >
-          <span className="font-tabular-sm text-tabular-sm">{letterError}</span>
-        </div>
+      {/* When no letter exists yet: Generation Card */}
+      {!letter ? (
+        <Card className="p-8 text-center flex flex-col items-center justify-center gap-4">
+          {isLetterLoading ? (
+            <div className="flex flex-col items-center justify-center py-8 gap-3">
+              <Loader2 className="w-8 h-8 animate-spin text-primary stroke-[2]" />
+              <p className="font-serif text-[18px] text-ink italic">
+                Munshi is writing your testimony...
+              </p>
+              <Skeleton className="w-64 h-3.5 mt-2" />
+              <Skeleton className="w-48 h-3.5" />
+            </div>
+          ) : (
+            <>
+              <p className="text-[14px] text-muted max-w-md leading-relaxed">
+                Munshi summarizes your current savings margin, recurring leaks, and target horizon to generate a personal letter from your arrival milestone.
+              </p>
+              <Button
+                variant="primary"
+                size="lg"
+                icon={Sparkles}
+                onClick={handleGenerateLetter}
+              >
+                Write my letter
+              </Button>
+            </>
+          )}
+        </Card>
+      ) : (
+        <>
+          {/* Controls Card */}
+          <Card className="p-4 sm:p-5 flex flex-col gap-4">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              {/* Big Play/Pause Button + Status */}
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={handleTogglePlay}
+                  className="w-12 h-12 rounded-full bg-primary hover:bg-primary-hover text-white flex items-center justify-center shadow-lift active:scale-95 transition-all cursor-pointer"
+                  aria-label={isPlaying && !isPaused ? 'Pause reading' : 'Listen to letter'}
+                >
+                  {isPlaying && !isPaused ? (
+                    <Pause className="w-5 h-5 fill-current" />
+                  ) : (
+                    <Play className="w-5 h-5 fill-current ml-0.5" />
+                  )}
+                </button>
+
+                <div className="flex flex-col">
+                  <span className="text-[14px] font-semibold text-ink leading-tight">
+                    {isPlaying ? (isPaused ? 'Paused' : 'Speaking letter…') : 'Listen to letter'}
+                  </span>
+                  <span className="text-[12px] text-muted">
+                    {ttsSupported ? 'Indian English narration' : 'Speech synthesis not available'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Speed & Voice Controls */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <Segmented
+                  size="sm"
+                  options={[
+                    { value: '0.9x', label: '0.9x' },
+                    { value: '1x', label: '1x' },
+                    { value: '1.25x', label: '1.25x' }
+                  ]}
+                  value={speed}
+                  onChange={setSpeed}
+                  name="tts-speed"
+                />
+
+                <div className="w-24">
+                  <Select
+                    options={['Warm', 'Calm', 'Deep']}
+                    value={voiceTone}
+                    onChange={(e) => setVoiceTone(e.target.value)}
+                  />
+                </div>
+
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  icon={Download}
+                  onClick={handleDownloadAudio}
+                  aria-label="Download testimony"
+                >
+                  <span className="hidden sm:inline">Download</span>
+                </Button>
+              </div>
+            </div>
+
+            {/* Sentence-level Read Progress Bar */}
+            {letterSentences.length > 0 && (
+              <div className="flex flex-col gap-1.5 pt-1">
+                <div className="w-full bg-canvas h-1.5 rounded-full overflow-hidden border border-border">
+                  <div
+                    className="h-full bg-primary transition-all duration-300 rounded-full"
+                    style={{
+                      width: `${
+                        activeSentenceIndex >= 0
+                          ? ((activeSentenceIndex + 1) / letterSentences.length) * 100
+                          : 0
+                      }%`
+                    }}
+                  />
+                </div>
+                <div className="flex items-center justify-between text-[11px] text-muted">
+                  <span>
+                    Sentence {activeSentenceIndex >= 0 ? activeSentenceIndex + 1 : 1} of {letterSentences.length}
+                  </span>
+                  <span>Click any sentence to seek</span>
+                </div>
+              </div>
+            )}
+          </Card>
+
+          {/* The Letter Card (#FBF8F1, lifted shadow) */}
+          <div
+            className="p-8 sm:p-12 rounded-card border border-border shadow-lift relative flex flex-col gap-6"
+            style={{ backgroundColor: '#FBF8F1' }}
+          >
+            {/* Date line */}
+            <div className="flex items-center justify-between text-[13px] font-medium text-muted pb-4 border-b border-border/60">
+              <span>Dispatch from {projection?.goalDatePlan || 'the target arrival date'}</span>
+              <span className="text-[12px]">
+                {letter.source === 'gemini' ? 'Gemini 2.5 Flash' : 'Offline testimony'}
+              </span>
+            </div>
+
+            {/* Letter Body in Fraunces 21px / 1.75 */}
+            <div className="space-y-4">
+              <span className="font-serif text-[20px] text-muted italic block">
+                Dear me,
+              </span>
+
+              <p className="font-serif text-[20px] sm:text-[21px] leading-[1.75] text-ink font-normal">
+                {letterSentences.map((sentence, idx) => {
+                  const isCurrent = activeSentenceIndex === idx;
+                  return (
+                    <span
+                      key={idx}
+                      onClick={() => handlePlayFromIndex(idx)}
+                      className={`transition-colors duration-200 cursor-pointer rounded-[4px] px-0.5 ${
+                        isCurrent
+                          ? 'bg-primary-tint text-primary font-medium'
+                          : 'hover:bg-canvas'
+                      }`}
+                    >
+                      {sentence}{' '}
+                    </span>
+                  );
+                })}
+              </p>
+
+              <div className="pt-4 font-serif text-[18px] text-muted italic">
+                — You, {projection?.goalDatePlan || 'Future Self'}
+              </div>
+            </div>
+
+            {/* Retrigger Action */}
+            <div className="pt-4 border-t border-border/60 flex items-center justify-between">
+              <span className="text-[12px] text-muted">
+                Letters are generated strictly from your summary numbers.
+              </span>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleGenerateLetter}
+                loading={isLetterLoading}
+              >
+                Write another
+              </Button>
+            </div>
+          </div>
+        </>
       )}
 
-      {/* Action Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-space-md">
-        <button
-          type="button"
-          disabled={isLetterLoading}
-          onClick={handleGenerateLetter}
-          className="bg-primary text-surface px-space-md py-3 font-label-md text-label-md uppercase tracking-wider hover:bg-on-surface-variant transition-colors disabled:opacity-50 cursor-pointer self-start sm:self-auto"
-          style={{ borderRadius: 0 }}
-        >
-          <span>{isLetterLoading ? 'Writing letter...' : letter ? 'Write another' : 'Write my letter'}</span>
-        </button>
-
-        {letter && (
-          <div className="flex items-center gap-2 font-tabular-sm text-on-surface-variant">
-            <span>{wordCount} words</span>
-            <span>·</span>
-            <span>{letter.source === 'gemini' ? 'Gemini 2.5 Flash' : 'Offline letter. The writer was unavailable.'}</span>
+      {/* "Ask Future You" Conversational Dialogue Section */}
+      <Card className="p-6 flex flex-col gap-5">
+        <div className="flex items-center justify-between pb-3 border-b border-border">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-full bg-primary-tint text-primary flex items-center justify-center">
+              <Sparkles className="w-3.5 h-3.5 stroke-[2]" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-[16px] text-ink">Ask Future You</h3>
+              <p className="text-[12px] text-muted">Talk or type to hear advice from your future self</p>
+            </div>
           </div>
-        )}
-      </div>
 
-      {/* Parchment Ruled Letter Folio */}
-      <div
-        className="bg-surface-container-lowest p-space-md md:p-10 border border-outline-variant relative flex flex-col gap-6"
-        style={{
-          boxShadow: 'inset 0 0 0 1px #cac6bd',
-          borderRadius: 0
-        }}
-      >
-        {/* Folio Header */}
-        <div className="flex items-center justify-between border-b border-outline-variant/60 pb-3">
-          <span className="font-kicker text-kicker uppercase tracking-widest text-secondary">
-            // DISPATCH FROM THE ARRIVAL DATE
-          </span>
-          <span className="font-tabular-sm text-tabular-sm text-on-surface-variant">
-            {letter?.generatedAt ? new Date(letter.generatedAt).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' }) : 'UNWRITTEN'}
+          <span className="text-[12px] font-medium text-success bg-primary-tint px-2.5 py-0.5 rounded-full">
+            Ready
           </span>
         </div>
 
-        {/* The Letter Body */}
-        {letter?.text ? (
-          <div className="space-y-4 max-w-2xl py-2">
-            <div className="font-['Fraunces'] italic text-body-md text-on-surface-variant">
-              Dear me,
-            </div>
-            <p className="font-body-lg text-[22px] leading-[36px] text-on-surface font-normal">
-              {letterSentences.map((sentence, idx) => {
-                const isCurrent = isSpeakingLetter && activeSentenceIndex === idx;
-                return (
-                  <span
-                    key={idx}
-                    className={`transition-colors duration-200 ${
-                      isCurrent
-                        ? 'underline decoration-[#994700] decoration-2 underline-offset-4 text-primary font-medium'
-                        : ''
-                    }`}
-                  >
-                    {sentence}{' '}
-                  </span>
-                );
-              })}
-            </p>
-            <div className="font-['Fraunces'] italic text-body-md text-on-surface-variant pt-2">
-              — You, {projection?.goalDateContinue || projection?.goalDatePlan || 'Future Self'}
-            </div>
-          </div>
-        ) : (
-          <div className="py-16 text-center flex flex-col items-center justify-center gap-2">
-            <p className="font-body-md text-on-surface-variant italic max-w-md">
-              The parchment is quiet. Click "Write my letter" to hear how your current savings rate and category leaks echo into your arrival date.
-            </p>
-          </div>
-        )}
-
-        {/* Read Aloud Control Strip Under Letter */}
-        {letter?.text && (
-          <div className="pt-4 border-t border-outline-variant/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            {ttsSupported ? (
-              <div className="flex items-center gap-3">
-                {!isSpeakingLetter ? (
-                  <button
-                    type="button"
-                    onClick={handleHearLetter}
-                    className="font-label-md text-label-md uppercase tracking-wider text-primary underline underline-offset-4 decoration-primary hover:text-secondary cursor-pointer"
-                  >
-                    Hear it from me
-                  </button>
-                ) : (
-                  <div className="flex items-center gap-3 font-label-md text-label-md uppercase tracking-wider">
-                    <span className="text-secondary">Speaking…</span>
-                    <span>·</span>
-                    {!isPausedLetter ? (
-                      <button
-                        type="button"
-                        onClick={handlePauseSpeech}
-                        className="underline underline-offset-4 decoration-primary text-primary hover:text-secondary cursor-pointer"
-                      >
-                        Pause
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={handleResumeSpeech}
-                        className="underline underline-offset-4 decoration-primary text-primary hover:text-secondary cursor-pointer"
-                      >
-                        Resume
-                      </button>
-                    )}
-                    <span>·</span>
-                    <button
-                      type="button"
-                      onClick={handleStopSpeech}
-                      className="underline underline-offset-4 decoration-primary text-primary hover:text-secondary cursor-pointer"
-                    >
-                      Stop
-                    </button>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <span className="font-body-sm text-body-sm text-on-surface-variant italic">
-                Your browser can't speak. The letter is still yours to read.
-              </span>
-            )}
-
-            <span className="font-tabular-sm text-tabular-sm text-on-surface-variant">
-              Your transactions never leave your device.
-            </span>
-          </div>
-        )}
-      </div>
-
-      {/* Ask Future You Section */}
-      <div
-        className="mt-space-lg bg-surface-container-low p-space-md md:p-8 border border-outline-variant flex flex-col gap-5"
-        style={{ borderRadius: 0 }}
-      >
-        <div className="flex items-center justify-between border-b border-outline-variant/60 pb-2">
-          <span className="font-kicker text-kicker uppercase tracking-widest text-on-surface">
-            // ASK FUTURE YOU
-          </span>
-          <span className="font-tabular-sm text-tabular-sm text-on-surface-variant">
-            VOICE &amp; DIALOGUE
-          </span>
-        </div>
-
-        {/* Suggestion Links */}
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-          <span className="font-kicker text-kicker uppercase text-on-surface-variant">Suggested:</span>
+        {/* Suggestion Chips */}
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-[12px] font-medium text-muted">Ask:</span>
           <button
             type="button"
             disabled={isAsking}
             onClick={() => submitQuestion('Will I make it?')}
-            className="font-body-sm text-body-sm text-primary underline underline-offset-4 decoration-primary hover:text-secondary cursor-pointer"
+            className="px-3 py-1 rounded-full text-[12px] font-medium bg-canvas hover:bg-border text-ink transition-colors cursor-pointer"
           >
             "Will I make it?"
           </button>
@@ -371,7 +440,7 @@ export default function LetterTab() {
             type="button"
             disabled={isAsking}
             onClick={() => submitQuestion('What should I cut first?')}
-            className="font-body-sm text-body-sm text-primary underline underline-offset-4 decoration-primary hover:text-secondary cursor-pointer"
+            className="px-3 py-1 rounded-full text-[12px] font-medium bg-canvas hover:bg-border text-ink transition-colors cursor-pointer"
           >
             "What should I cut first?"
           </button>
@@ -379,33 +448,81 @@ export default function LetterTab() {
             type="button"
             disabled={isAsking}
             onClick={() => submitQuestion('What if rent goes up ₹3,000?')}
-            className="font-body-sm text-body-sm text-primary underline underline-offset-4 decoration-primary hover:text-secondary cursor-pointer"
+            className="px-3 py-1 rounded-full text-[12px] font-medium bg-canvas hover:bg-border text-ink transition-colors cursor-pointer"
           >
             "What if rent goes up ₹3,000?"
           </button>
         </div>
 
-        {/* Voice and Text Input Form */}
+        {/* Conversation Message Bubbles */}
+        {conversation.length > 0 && (
+          <div className="space-y-4 py-2">
+            {conversation.map((turn, idx) => (
+              <div key={idx} className="space-y-3">
+                {/* User Message on Right */}
+                <div className="flex justify-end">
+                  <div className="bg-primary-tint text-primary text-[14px] font-medium px-4 py-2.5 rounded-[14px] rounded-tr-none max-w-md shadow-sm">
+                    {turn.q}
+                  </div>
+                </div>
+
+                {/* Future You Message on Left */}
+                <div className="flex items-start gap-2.5">
+                  <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-primary to-accent-saffron shrink-0 shadow-sm flex items-center justify-center text-white">
+                    <Sparkles className="w-4 h-4 stroke-[2]" />
+                  </div>
+                  <div className="bg-surface border border-border text-ink text-[14px] p-3.5 rounded-[14px] rounded-tl-none max-w-lg shadow-sm flex flex-col gap-2">
+                    <p className="leading-relaxed">{turn.a}</p>
+                    {ttsSupported && (
+                      <button
+                        type="button"
+                        onClick={() => handleSpeakAnswer(turn.a)}
+                        className="text-[12px] font-medium text-primary hover:underline flex items-center gap-1 self-start cursor-pointer pt-1"
+                      >
+                        <Volume2 className="w-3.5 h-3.5" />
+                        <span>Hear it</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Typing Indicator while thinking */}
+        {isAsking && (
+          <div className="flex items-center gap-2 text-muted text-[13px] py-1">
+            <div className="flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-muted animate-bounce" style={{ animationDelay: '0ms' }} />
+              <span className="w-1.5 h-1.5 rounded-full bg-muted animate-bounce" style={{ animationDelay: '150ms' }} />
+              <span className="w-1.5 h-1.5 rounded-full bg-muted animate-bounce" style={{ animationDelay: '300ms' }} />
+            </div>
+            <span>Future You is thinking…</span>
+          </div>
+        )}
+
+        {/* Input Form with Voice Mic & Text Input */}
         <form
           onSubmit={(e) => {
             e.preventDefault();
             submitQuestion(questionInput, false);
           }}
-          className="flex items-center gap-3 pt-1"
+          className="flex items-center gap-2 pt-2 border-t border-border"
         >
           {sttSupported && (
             <button
               type="button"
               disabled={isAsking}
               onClick={handleMicClick}
-              className={`px-3 py-2 border font-label-md text-label-md uppercase tracking-wider transition-colors cursor-pointer shrink-0 ${
+              className={`h-10 px-3.5 rounded-control border flex items-center gap-1.5 text-[13px] font-medium transition-all cursor-pointer shrink-0 ${
                 sttState === 'listening'
-                  ? 'bg-secondary text-surface border-secondary animate-pulse'
-                  : 'bg-surface-container-lowest text-primary border-primary hover:bg-surface-container'
+                  ? 'bg-accent-saffron text-white border-accent-saffron animate-pulse shadow-sm'
+                  : 'bg-canvas border-border text-ink hover:bg-surface'
               }`}
-              style={{ borderRadius: 0 }}
             >
-              {sttState === 'listening' ? 'Listening… ▍' : 'Speak'}
+              <Mic className="w-4 h-4 stroke-[2]" />
+              <span>{sttState === 'listening' ? 'Listening…' : 'Speak'}</span>
             </button>
           )}
 
@@ -415,54 +532,29 @@ export default function LetterTab() {
               value={questionInput}
               disabled={isAsking || sttState === 'listening'}
               onChange={(e) => setQuestionInput(e.target.value)}
-              placeholder={sttState === 'listening' ? 'Speak now, listening to you…' : 'Ask Future You a question about your plan...'}
-              className="w-full bg-transparent border-b border-primary py-2 px-1 font-body-md text-on-surface placeholder-on-surface-variant/50 focus:outline-none focus:border-b-2"
+              placeholder={
+                sttState === 'listening'
+                  ? 'Listening to your voice...'
+                  : 'Ask about rent hikes, savings, or what to trim...'
+              }
+              className="w-full bg-canvas border border-border rounded-control h-10 px-3.5 text-[14px] text-ink placeholder:text-muted/60 focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary transition-all"
             />
           </div>
 
-          <button
+          <Button
             type="submit"
+            variant="primary"
             disabled={isAsking || !questionInput.trim()}
-            className="px-4 py-2 bg-primary text-surface font-label-md text-label-md uppercase tracking-wider hover:bg-on-surface-variant transition-colors disabled:opacity-40 cursor-pointer shrink-0"
-            style={{ borderRadius: 0 }}
+            icon={Send}
           >
-            {isAsking ? 'Thinking…' : 'Send'}
-          </button>
+            Send
+          </Button>
         </form>
 
         {askError && (
-          <div className="p-space-xs text-error font-tabular-sm text-tabular-sm">
-            {askError}
-          </div>
+          <p className="text-[12px] text-danger mt-1">{askError}</p>
         )}
-
-        {/* Conversation Dialogue Display (Max 3 turns) */}
-        {conversation.length > 0 && (
-          <div className="mt-space-sm space-y-4 border-t border-outline-variant/60 pt-4">
-            {conversation.map((turn, idx) => (
-              <div key={idx} className="flex flex-col gap-1.5 pb-3 border-b border-outline-variant/30 last:border-b-0">
-                <div className="font-tabular-sm font-mono text-[13px] text-on-surface-variant">
-                  &gt; You: "{turn.q}"
-                </div>
-                <div className="flex items-start justify-between gap-4">
-                  <p className="font-['Fraunces'] italic text-[18px] leading-[28px] text-on-surface">
-                    {turn.a}
-                  </p>
-                  {ttsSupported && (
-                    <button
-                      type="button"
-                      onClick={() => handleSpeakAnswer(turn.a)}
-                      className="font-label-md text-[11px] uppercase tracking-wider text-secondary underline underline-offset-4 decoration-secondary shrink-0 pt-1 cursor-pointer"
-                    >
-                      Hear it
-                    </button>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+      </Card>
     </div>
   );
 }

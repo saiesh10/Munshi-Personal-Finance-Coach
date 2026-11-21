@@ -1,27 +1,42 @@
+import { Inter, Fraunces } from 'next/font/google';
+import { Toaster } from 'sonner';
 import './globals.css';
 
+const inter = Inter({
+  subsets: ['latin'],
+  variable: '--font-inter',
+  display: 'swap',
+});
+
+const fraunces = Fraunces({
+  subsets: ['latin'],
+  variable: '--font-fraunces',
+  display: 'swap',
+});
+
 export const metadata = {
-  title: 'Munshi — The accountant who remembers you',
-  description: 'Zero-cost, private personal finance coach and bahi-khata ledger for India.',
+  title: 'Munshi — Personal Finance Coach',
+  description: 'Private, zero-cost personal finance management and projection bahi-khata for India.',
 };
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en">
-      <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link
-          href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400..700;1,400..700&family=Fraunces:ital,opsz,wght@0,9..144,400..700;1,9..144,400..700&family=JetBrains+Mono:wght@400;500;600&display=swap"
-          rel="stylesheet"
-        />
-        <link
-          href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0"
-          rel="stylesheet"
-        />
-      </head>
-      <body className="bg-surface font-body-md text-on-surface flex flex-col min-h-screen">
+    <html lang="en" className={`${inter.variable} ${fraunces.variable}`}>
+      <body className="bg-canvas text-ink font-sans min-h-screen selection:bg-primary-tint selection:text-primary">
         {children}
+        <Toaster
+          position="bottom-right"
+          toastOptions={{
+            style: {
+              background: '#FFFFFF',
+              color: '#14201B',
+              border: '1px solid #E7E2D8',
+              borderRadius: '10px',
+              fontFamily: 'var(--font-inter), sans-serif',
+              boxShadow: '0 4px 12px rgba(20, 32, 27, 0.08)',
+            },
+          }}
+        />
       </body>
     </html>
   );

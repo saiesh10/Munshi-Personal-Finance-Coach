@@ -1,7 +1,28 @@
 'use client';
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import { useLedger } from '@/context/LedgerContext';
+import {
+  ScanText,
+  UploadCloud,
+  FileSpreadsheet,
+  MessageSquare,
+  Smartphone,
+  Mail,
+  ShieldCheck,
+  CheckCircle2,
+  AlertTriangle,
+  ArrowRight,
+  Database,
+  Trash2,
+  ChevronDown,
+  ChevronUp,
+  Loader2
+} from 'lucide-react';
+import Card, { CardHeader } from './ui/Card';
+import Button from './ui/Button';
+import Segmented from './ui/Segmented';
+import Badge from './ui/Badge';
 import { SAMPLE_RAW_SMS } from '@/lib/mock/sampleData';
 
 const DEFAULT_SAMPLE_TEXT = `Rs 499.00 debited from A/C XX4102 on 12-Nov-26 to NETFLIX MUMBAI. Ref 631728192831. Bal Rs 41,200.00 - HDFC Bank
@@ -18,332 +39,366 @@ export default function PasteTab() {
     setActiveTab
   } = useLedger();
 
+  const [activeSegment, setActiveSegment] = useState('text'); // 'text' | 'file'
   const [inputText, setInputText] = useState(DEFAULT_SAMPLE_TEXT);
-  const [showRawDrawer, setShowRawDrawer] = useState(false);
+  const [uploadedFile, setUploadedFile] = useState(null);
+  const [fileContent, setFileContent] = useState('');
+  const [showUnparsedList, setShowUnparsedList] = useState(false);
+  const [readingStep, setReadingStep] = useState(0); // 0: idle, 1: reading, 2: sorting, 3: subscriptions
+
   const fileInputRef = useRef(null);
 
-  const lineCount = inputText.trim() ? inputText.trim().split('\n').filter(Boolean).length : 0;
+  // Client-side live message detection: count rupee patterns / debit / credit indicators
+  const detectedCount = useMemo(() => {
+    if (!inputText.trim()) return 0;
+    const matches = inputText.match(/(?:Rs\.?|INR|₹|debited|credited|spent|paid|sent)\s*[0-9,]+/gi);
+    return matches ? matches.length : (inputText.trim().split('\n').filter(Boolean).length);
+  }, [inputText]);
 
-  const handleRead = async () => {
-    if (!inputText.trim()) return;
-    await handleParseAndCategorize({ text: inputText });
+  // Handle Drag & Drop
+  const handleDrop = (e) => {
+    e.preventDefault();
+    const file = e.dataTransfer.files?.[0];
+    if (file) processFile(file);
   };
 
-  const handleFileUpload = (e) => {
+  const handleFileSelect = (e) => {
     const file = e.target.files?.[0];
-    if (!file) return;
+    if (file) processFile(file);
+  };
+
+  const processFile = (file) => {
+    setUploadedFile({
+      name: file.name,
+      size: (file.size / 1024).toFixed(1) + ' KB'
+    });
 
     const reader = new FileReader();
-    reader.onload = async (event) => {
-      const csvContent = event.target?.result;
-      if (typeof csvContent === 'string') {
-        setInputText(csvContent);
-        await handleParseAndCategorize({ csv: csvContent });
-      }
+    reader.onload = (event) => {
+      setFileContent(event.target?.result || '');
     };
     reader.readAsText(file);
-    e.target.value = '';
+  };
+
+  const removeFile = () => {
+    setUploadedFile(null);
+    setFileContent('');
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  // Real await step progress execution
+  const handleExecuteRead = async () => {
+    if (activeSegment === 'text' && !inputText.trim()) return;
+    if (activeSegment === 'file' && !fileContent.trim()) return;
+
+    setReadingStep(1); // 1. Reading messages
+    try {
+      const stepTimer1 = setTimeout(() => setReadingStep(2), 250);
+      const stepTimer2 = setTimeout(() => setReadingStep(3), 500);
+
+      await handleParseAndCategorize({
+        text: activeSegment === 'text' ? inputText : undefined,
+        csv: activeSegment === 'file' ? fileContent : undefined
+      });
+
+      clearTimeout(stepTimer1);
+      clearTimeout(stepTimer2);
+      setReadingStep(0);
+    } catch {
+      setReadingStep(0);
+    }
   };
 
   return (
-    <div className="flex flex-col w-full pb-12">
-      {/* Hidden CSV file picker */}
-      <input
-        type="file"
-        ref={fileInputRef}
-        onChange={handleFileUpload}
-        accept=".csv,text/csv"
-        className="hidden"
-      />
-
-      {/* Top Ledger Margin & Kicker */}
-      <div className="flex items-center justify-between pb-space-sm">
-        <span className="font-kicker text-kicker uppercase text-on-surface-variant tracking-[0.16em]">
-          01 / PASTE
-        </span>
-        <span className="font-label-md text-label-md text-on-surface-variant flex items-center gap-1.5">
-          <span className="inline-block w-1.5 h-1.5 bg-secondary"></span>
-          UNRECONCILED DESK
-        </span>
-      </div>
-
-      {/* Editorial Headline Section */}
-      <div className="pt-space-xs pb-space-md">
-        <h1 className="font-['Fraunces'] text-[36px] leading-[40px] tracking-tight font-normal text-on-surface">
+    <div className="flex flex-col gap-6 w-full pb-16">
+      {/* Editorial Headline */}
+      <div className="flex flex-col gap-1">
+        <h2 className="font-serif text-[28px] font-normal text-ink leading-tight">
           Bring your mess.
-        </h1>
-        <p className="font-['Fraunces'] italic text-body-lg text-on-surface-variant pt-space-xs">
-          Paste whatever your bank sent you. I'll handle the mess.
+        </h2>
+        <p className="text-[14px] text-muted">
+          Paste whatever your bank sent you. Munshi extracts the amounts, cleans merchant names, and handles the rest.
         </p>
       </div>
 
-      {/* Inline Marigold Error Banner */}
+      {/* Inline Danger Alert */}
       {error && (
-        <div
-          className="bg-surface-container-high p-space-md mb-space-md flex items-start gap-space-sm"
-          style={{ borderLeft: '3px solid #ba1a1a' }}
-        >
-          <span className="material-symbols-outlined text-error text-[20px] shrink-0 mt-0.5">error</span>
-          <div className="flex flex-col">
-            <span className="font-label-md text-label-md uppercase tracking-wider text-error">
-              // AUDIT INTERRUPTION
-            </span>
-            <p className="font-body-sm text-body-sm text-on-surface mt-0.5">{error}</p>
+        <div className="bg-danger-tint border border-danger/30 rounded-card p-4 flex items-start gap-3">
+          <AlertTriangle className="w-5 h-5 text-danger shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <h4 className="text-[14px] font-semibold text-danger">Could not read input</h4>
+            <p className="text-[13px] text-ink mt-0.5">{error}</p>
           </div>
+          <Button variant="outline" size="sm" onClick={handleExecuteRead}>
+            Retry
+          </Button>
         </div>
       )}
 
-      {/* Munshi Advice Stamp Note */}
-      <div
-        className="bg-surface-container-high p-space-md mb-space-lg flex items-start gap-space-sm"
-        style={{ borderLeft: '3px solid #994700' }}
-      >
-        <span className="material-symbols-outlined text-secondary text-[20px] shrink-0 mt-0.5">history_edu</span>
-        <div className="flex flex-col">
-          <span className="font-label-md text-label-md uppercase tracking-wider text-secondary">
-            // MUNSHI GUIDANCE
-          </span>
-          <p className="font-body-sm text-body-sm text-on-surface italic mt-0.5">
-            Raw transactional text messages, UPI push notes, or copied email intimations. Leave in the sender IDs and timestamps; the ledger sorts chronology on its own.
-          </p>
-        </div>
-      </div>
+      {/* Two Column Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        {/* Left Column: Input Card (7 cols) */}
+        <Card className="lg:col-span-7 flex flex-col gap-4">
+          <div className="flex items-center justify-between">
+            <Segmented
+              options={[
+                { value: 'text', label: 'Paste texts' },
+                { value: 'file', label: 'Upload file' }
+              ]}
+              value={activeSegment}
+              onChange={setActiveSegment}
+              name="paste-mode"
+            />
 
-      {/* The Parchment Ruled Textarea Card */}
-      <div
-        className="bg-surface-container-lowest p-space-md flex flex-col relative"
-        style={{ boxShadow: 'inset 0 0 0 1px #cac6bd' }}
-      >
-        {/* Folio Header Bar */}
-        <div className="flex items-center justify-between pb-space-xs mb-space-xs border-b border-outline-variant/60">
-          <div className="flex items-center gap-2">
-            <span className="font-kicker text-kicker uppercase tracking-widest text-on-surface-variant">
-              LEDGER INTAKE FOLIO
-            </span>
-            <span className="font-tabular-sm text-tabular-sm text-on-surface-variant/80">#BK-2026-NOV</span>
-          </div>
-          <span className="font-tabular-sm text-tabular-sm text-on-surface-variant">
-            {lineCount} {lineCount === 1 ? 'line buffered' : 'lines buffered'}
-          </span>
-        </div>
-
-        {/* Ruled Line Background Textarea Wrapper */}
-        <div className="relative w-full min-h-[260px] bg-surface-container-lowest">
-          <textarea
-            value={inputText}
-            onChange={(e) => setInputText(e.target.value)}
-            rows={9}
-            spellCheck={false}
-            placeholder="Paste your bank SMS messages or statement here..."
-            className="w-full min-h-[260px] bg-transparent font-tabular-md text-tabular-md text-on-surface p-space-xs resize-y focus:outline-none placeholder-on-surface-variant/40 selection:bg-secondary-fixed selection:text-on-secondary-fixed"
-            style={{
-              backgroundImage: 'repeating-linear-gradient(transparent, transparent 31px, #cac6bd 31px, #cac6bd 32px)',
-              lineHeight: '32px',
-              paddingTop: '1px',
-              border: 'none',
-              borderRadius: '0px'
-            }}
-          />
-        </div>
-
-        {/* Quick Format Assistance Strip */}
-        <div className="flex items-center justify-between pt-space-xs border-t border-outline-variant/60 font-kicker text-kicker text-on-surface-variant uppercase">
-          <span>Auto-splits SMS, NEFT &amp; IMPS</span>
-          <span className="text-on-surface">Private • Parsed locally</span>
-        </div>
-      </div>
-
-      {/* Action Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-space-md pt-space-lg">
-        <div className="flex items-center gap-space-sm flex-wrap">
-          {/* Primary Action: Read These */}
-          <button
-            type="button"
-            disabled={isLoading || !inputText.trim()}
-            onClick={handleRead}
-            className="bg-primary text-surface px-space-md py-3 font-label-md text-label-md uppercase tracking-wider flex items-center justify-center gap-2 hover:bg-on-surface-variant transition-colors disabled:opacity-50 cursor-pointer"
-            style={{ borderRadius: 0 }}
-          >
-            <span className="material-symbols-outlined text-[16px]">menu_book</span>
-            <span>{isLoading ? 'Reading...' : 'Read these'}</span>
-          </button>
-
-          {/* Secondary: Upload CSV */}
-          <button
-            type="button"
-            disabled={isLoading}
-            onClick={() => fileInputRef.current?.click()}
-            className="bg-surface-container-low text-on-surface px-space-md py-3 font-label-md text-label-md uppercase tracking-wider flex items-center justify-center gap-2 hover:bg-surface-container transition-colors disabled:opacity-50 cursor-pointer"
-            style={{ border: '1px solid #1c1b18', borderRadius: 0 }}
-          >
-            <span className="material-symbols-outlined text-[16px]">file_upload</span>
-            <span>Upload CSV</span>
-          </button>
-        </div>
-
-        {/* Text Link: Try with Sample Data */}
-        <button
-          type="button"
-          disabled={isLoading}
-          onClick={async () => {
-            setInputText(SAMPLE_RAW_SMS);
-            await handleLoadSampleData();
-          }}
-          className="font-label-md text-label-md uppercase tracking-wider text-primary underline underline-offset-4 decoration-primary hover:text-secondary self-start sm:self-center transition-colors py-2 cursor-pointer"
-        >
-          Try with sample data
-        </button>
-      </div>
-
-      {/* Subtle Archival Divider */}
-      <div className="w-full my-space-xl" style={{ height: '1px', backgroundColor: '#cac6bd' }}></div>
-
-      {/* Parsing Result Ledger Pane */}
-      {lastParseStats && (
-        <div
-          className="bg-surface-container p-space-md relative flex flex-col gap-space-md"
-          style={{ border: '1px solid #cac6bd', borderRadius: 0 }}
-        >
-          {/* Header of the intake audit */}
-          <div className="flex items-center justify-between border-b border-outline-variant pb-space-sm">
-            <div className="flex items-center gap-space-xs">
-              <span className="material-symbols-outlined text-secondary text-[20px]">assignment_turned_in</span>
-              <span className="font-kicker text-kicker uppercase tracking-widest text-on-surface">
-                Munshi's Intake Audit
+            {activeSegment === 'text' && (
+              <span className="text-[13px] text-muted flex items-center gap-1.5">
+                <CheckCircle2 className="w-4 h-4 text-success" />
+                <span>{detectedCount} {detectedCount === 1 ? 'message' : 'messages'} detected</span>
               </span>
-            </div>
-            <span
-              className="font-label-md text-label-md text-on-surface-variant bg-surface-container-high px-2 py-0.5"
-              style={{ border: '1px solid #cac6bd' }}
-            >
-              VERIFIED {lastParseStats.parsed} TRANSACTIONS
-            </span>
-          </div>
-
-          {/* Tally Grid Metric */}
-          <div className="grid grid-cols-3 gap-space-sm py-space-xs">
-            <div className="bg-surface-container-low p-space-sm" style={{ border: '1px solid #cac6bd' }}>
-              <span className="font-kicker text-kicker uppercase text-on-surface-variant block">Discovered</span>
-              <span className="font-tabular-lg text-tabular-lg font-medium text-on-surface">
-                {String(lastParseStats.discovered).padStart(2, '0')}
-              </span>
-              <span className="font-body-sm text-body-sm text-on-surface-variant block italic">SMS / Notes</span>
-            </div>
-
-            <div
-              className="bg-surface-container-low p-space-sm"
-              style={{
-                borderLeft: '3px solid #244f31',
-                borderTop: '1px solid #cac6bd',
-                borderRight: '1px solid #cac6bd',
-                borderBottom: '1px solid #cac6bd'
-              }}
-            >
-              <span className="font-kicker text-kicker uppercase text-on-tertiary-fixed-variant block">Parsed</span>
-              <span className="font-tabular-lg text-tabular-lg font-medium text-on-surface">
-                {String(lastParseStats.parsed).padStart(2, '0')}
-              </span>
-              <span className="font-body-sm text-body-sm text-on-surface-variant block italic">Categorized</span>
-            </div>
-
-            <div
-              className="bg-surface-container-low p-space-sm"
-              style={{
-                borderLeft: '3px solid #994700',
-                borderTop: '1px solid #cac6bd',
-                borderRight: '1px solid #cac6bd',
-                borderBottom: '1px solid #cac6bd'
-              }}
-            >
-              <span className="font-kicker text-kicker uppercase text-secondary block">Ambiguous</span>
-              <span className="font-tabular-lg text-tabular-lg font-medium text-secondary">
-                {String(lastParseStats.unparsed).padStart(2, '0')}
-              </span>
-              <span className="font-body-sm text-body-sm text-on-surface-variant block italic">Raw strings</span>
-            </div>
-          </div>
-
-          {/* Editorial Result Statement */}
-          <div className="pt-space-xs">
-            <p className="font-body-lg text-body-lg text-on-surface leading-snug">
-              Read {lastParseStats.discovered} messages. Understood {lastParseStats.parsed}.{' '}
-              {lastParseStats.unparsed > 0 ? `Couldn't read ${lastParseStats.unparsed}.` : 'Reconciled all entries.'}
-            </p>
-            {lastParseStats.unparsed > 0 && (
-              <div className="pt-space-xs flex items-center gap-space-sm">
-                <button
-                  type="button"
-                  onClick={() => setShowRawDrawer(!showRawDrawer)}
-                  className="font-kicker text-kicker uppercase tracking-wider text-secondary underline underline-offset-4 decoration-secondary hover:text-on-secondary-fixed transition-colors cursor-pointer"
-                >
-                  {showRawDrawer ? `hide the ${lastParseStats.unparsed} raw lines` : `show the ${lastParseStats.unparsed} raw lines`}
-                </button>
-              </div>
             )}
           </div>
 
-          {/* Collapsible Raw Ambiguous Lines Inspection Pane */}
-          {showRawDrawer && unparsed.length > 0 && (
-            <div
-              className="bg-surface-container-highest p-space-md"
-              style={{ border: '1px solid #cac6bd' }}
-            >
-              <div className="flex items-center justify-between pb-space-xs mb-space-xs border-b border-outline-variant">
-                <span className="font-kicker text-kicker uppercase text-on-surface-variant">
-                  Unresolved Text Segments (Manual Ledger Needed)
-                </span>
-                <span className="font-tabular-sm text-tabular-sm text-secondary">
-                  {unparsed.length} entries
-                </span>
-              </div>
-              <div className="space-y-space-sm font-tabular-sm text-tabular-sm text-on-surface">
-                {unparsed.map((line, idx) => (
-                  <div
-                    key={idx}
-                    className="p-space-xs bg-surface-container-low"
-                    style={{ borderLeft: '2px solid #994700' }}
-                  >
-                    <span className="text-on-surface-variant block text-[11px] uppercase tracking-wider">
-                      Entry {idx + 1}
-                    </span>
-                    <code>"{line}"</code>
-                    <p className="font-body-sm text-body-sm italic text-on-surface-variant mt-1">
-                      Munshi note: Non-settlement message or non-standard format.
-                    </p>
+          {/* Paste Text Tab */}
+          {activeSegment === 'text' && (
+            <div className="flex flex-col gap-2">
+              <textarea
+                value={inputText}
+                onChange={(e) => setInputText(e.target.value)}
+                rows={9}
+                placeholder="Paste SMS messages, UPI debit notifications, or copied email receipts here..."
+                className="w-full bg-surface border border-border rounded-control p-3.5 text-[15px] text-ink placeholder:text-muted/60 leading-relaxed focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 transition-all font-mono"
+              />
+            </div>
+          )}
+
+          {/* Upload CSV Tab */}
+          {activeSegment === 'file' && (
+            <div className="flex flex-col gap-3">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".csv,text/csv"
+                onChange={handleFileSelect}
+                className="hidden"
+              />
+
+              {!uploadedFile ? (
+                <div
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={handleDrop}
+                  onClick={() => fileInputRef.current?.click()}
+                  className="border-2 border-dashed border-border rounded-control p-8 flex flex-col items-center justify-center gap-2 hover:bg-canvas transition-colors cursor-pointer text-center"
+                >
+                  <div className="w-10 h-10 rounded-full bg-canvas flex items-center justify-center text-muted">
+                    <UploadCloud className="w-5 h-5 stroke-[1.75]" />
                   </div>
-                ))}
+                  <div>
+                    <span className="text-[14px] font-medium text-ink">Drop a CSV here or browse</span>
+                    <p className="text-[12px] text-muted mt-0.5">Supports HDFC, SBI, ICICI, Axis, and standard bank exports</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="p-3 bg-canvas border border-border rounded-control flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <FileSpreadsheet className="w-6 h-6 text-primary shrink-0" />
+                    <div>
+                      <span className="text-[14px] font-medium text-ink block leading-snug">{uploadedFile.name}</span>
+                      <span className="text-[12px] text-muted">{uploadedFile.size}</span>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={removeFile}
+                    className="p-1.5 rounded-control text-muted hover:text-danger hover:bg-danger-tint transition-colors cursor-pointer"
+                    aria-label="Remove file"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Real Await 3-step Progress Indicator */}
+          {readingStep > 0 && (
+            <div className="p-4 bg-primary-tint border border-primary/20 rounded-control flex flex-col gap-2">
+              <div className="flex items-center gap-2 text-[14px] font-semibold text-primary">
+                <Loader2 className="w-4 h-4 animate-spin stroke-[2]" />
+                <span>Munshi is processing your statements...</span>
+              </div>
+              <div className="space-y-1.5 pl-6 text-[13px]">
+                <div className={`flex items-center gap-2 ${readingStep >= 1 ? 'text-primary font-medium' : 'text-muted'}`}>
+                  <span>1. Reading messages</span>
+                  {readingStep > 1 && <CheckCircle2 className="w-3.5 h-3.5 text-success" />}
+                </div>
+                <div className={`flex items-center gap-2 ${readingStep >= 2 ? 'text-primary font-medium' : 'text-muted'}`}>
+                  <span>2. Sorting into categories</span>
+                  {readingStep > 2 && <CheckCircle2 className="w-3.5 h-3.5 text-success" />}
+                </div>
+                <div className={`flex items-center gap-2 ${readingStep >= 3 ? 'text-primary font-medium' : 'text-muted'}`}>
+                  <span>3. Looking for subscriptions</span>
+                </div>
               </div>
             </div>
           )}
 
-          {/* Bottom Actions: Advance to Ledger Page */}
-          <div className="pt-space-sm border-t border-outline-variant flex flex-col sm:flex-row items-start sm:items-center justify-between gap-space-sm">
-            <span className="font-body-sm text-body-sm text-on-surface-variant italic">
-              Balances automatically calculated with ledger rules.
-            </span>
-            <button
-              type="button"
-              onClick={() => setActiveTab('ledger')}
-              className="w-full sm:w-auto bg-primary text-surface px-space-lg py-3 font-label-md text-label-md uppercase tracking-wider flex items-center justify-center gap-space-sm hover:bg-on-surface-variant transition-colors cursor-pointer"
-              style={{ borderRadius: 0 }}
+          {/* Footer Action Strip */}
+          <div className="flex items-center justify-between pt-3 border-t border-border">
+            <Button
+              variant="ghost"
+              size="sm"
+              icon={Database}
+              onClick={handleLoadSampleData}
             >
-              <span>Open the ledger</span>
-              <span className="font-tabular-md">→</span>
-            </button>
-          </div>
-        </div>
-      )}
+              Use sample data
+            </Button>
 
-      {/* Historical Archival Context Stamp */}
-      <div className="mt-space-lg p-space-md bg-surface-container-low flex items-center justify-between border-t border-b border-outline-variant">
-        <div className="flex items-center gap-space-sm">
-          <span className="material-symbols-outlined text-outline text-[18px]">verified_user</span>
-          <span className="font-kicker text-kicker uppercase text-on-surface-variant tracking-wider">
-            Zero telemetry • Parsed on your machine only
-          </span>
+            <Button
+              variant="primary"
+              onClick={handleExecuteRead}
+              loading={isLoading || readingStep > 0}
+              icon={ScanText}
+              disabled={(activeSegment === 'text' && !inputText.trim()) || (activeSegment === 'file' && !fileContent.trim())}
+            >
+              Read my messages
+            </Button>
+          </div>
+        </Card>
+
+        {/* Right Column: Guidance & Privacy Cards (5 cols) */}
+        <div className="lg:col-span-5 flex flex-col gap-4">
+          {/* Supported Formats Card */}
+          <Card>
+            <CardHeader
+              title="What Munshi can read"
+              subtitle="Tolerant of bank formats, UPI handles, and messy text"
+            />
+
+            <div className="space-y-3">
+              <div className="flex items-start gap-3 p-2 rounded-control hover:bg-canvas transition-colors">
+                <div className="w-8 h-8 rounded-control bg-primary-tint text-primary flex items-center justify-center shrink-0 mt-0.5">
+                  <MessageSquare className="w-4 h-4 stroke-[1.75]" />
+                </div>
+                <div>
+                  <h4 className="text-[14px] font-medium text-ink">Bank SMS</h4>
+                  <p className="text-[12px] text-muted leading-relaxed">
+                    HDFC, SBI, ICICI, Axis, Kotak debit and credit transaction SMS.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3 p-2 rounded-control hover:bg-canvas transition-colors">
+                <div className="w-8 h-8 rounded-control bg-accent-tint text-accent-saffron flex items-center justify-center shrink-0 mt-0.5">
+                  <Smartphone className="w-4 h-4 stroke-[1.75]" />
+                </div>
+                <div>
+                  <h4 className="text-[14px] font-medium text-ink">UPI alerts</h4>
+                  <p className="text-[12px] text-muted leading-relaxed">
+                    PhonePe, Google Pay, Paytm, BHIM notifications with VPAs.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3 p-2 rounded-control hover:bg-canvas transition-colors">
+                <div className="w-8 h-8 rounded-control bg-[#EEF5E8] text-[#5B8C3A] flex items-center justify-center shrink-0 mt-0.5">
+                  <FileSpreadsheet className="w-4 h-4 stroke-[1.75]" />
+                </div>
+                <div>
+                  <h4 className="text-[14px] font-medium text-ink">CSV statements</h4>
+                  <p className="text-[12px] text-muted leading-relaxed">
+                    Downloaded bank statements with preambles and narration columns.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3 p-2 rounded-control hover:bg-canvas transition-colors">
+                <div className="w-8 h-8 rounded-control bg-[#EBF2F9] text-[#3A6EA5] flex items-center justify-center shrink-0 mt-0.5">
+                  <Mail className="w-4 h-4 stroke-[1.75]" />
+                </div>
+                <div>
+                  <h4 className="text-[14px] font-medium text-ink">Copied email alerts</h4>
+                  <p className="text-[12px] text-muted leading-relaxed">
+                    Card spending confirmations, Netbanking intimations, and receipts.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </Card>
+
+          {/* Privacy Card */}
+          <Card className="bg-[#E6F2EC]/40 border-primary/20">
+            <div className="flex items-start gap-3">
+              <div className="w-8 h-8 rounded-control bg-primary text-white flex items-center justify-center shrink-0 shadow-sm">
+                <ShieldCheck className="w-4 h-4 stroke-[2]" />
+              </div>
+              <div className="flex flex-col gap-1">
+                <h4 className="text-[14px] font-semibold text-primary">Private by design</h4>
+                <p className="text-[13px] text-ink leading-relaxed">
+                  We don't store your messages. Your books stay in this browser. Only summary numbers are sent to the AI.
+                </p>
+              </div>
+            </div>
+          </Card>
         </div>
-        <span className="font-tabular-sm text-tabular-sm text-on-surface-variant">FOLIO VOL. XIV</span>
       </div>
+
+      {/* Result Card (When messages have been read) */}
+      {lastParseStats && (
+        <Card className="border-primary/20 bg-primary-tint/30">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex flex-col gap-1">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="w-5 h-5 text-success" />
+                <h3 className="text-[16px] font-semibold text-ink">
+                  Read {lastParseStats.discovered} messages, understood {lastParseStats.parsed}
+                </h3>
+              </div>
+              <div className="flex items-center gap-2 mt-1">
+                <Badge variant="success">
+                  {lastParseStats.parsed} parsed
+                </Badge>
+                {lastParseStats.unparsed > 0 && (
+                  <Badge variant="saffron">
+                    {lastParseStats.unparsed} couldn't be read
+                  </Badge>
+                )}
+              </div>
+            </div>
+
+            <Button
+              variant="primary"
+              icon={ArrowRight}
+              onClick={() => setActiveTab('ledger')}
+            >
+              Open the ledger
+            </Button>
+          </div>
+
+          {/* Collapsible Unparsed List */}
+          {lastParseStats.unparsed > 0 && unparsed.length > 0 && (
+            <div className="mt-4 pt-4 border-t border-border">
+              <button
+                type="button"
+                onClick={() => setShowUnparsedList(!showUnparsedList)}
+                className="flex items-center gap-1.5 text-[13px] font-medium text-accent-saffron hover:underline cursor-pointer"
+              >
+                <span>{showUnparsedList ? 'Hide unreadable lines' : `Show the ${lastParseStats.unparsed} unreadable lines`}</span>
+                {showUnparsedList ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+              </button>
+
+              {showUnparsedList && (
+                <div className="mt-2 space-y-1.5 max-h-48 overflow-y-auto no-scrollbar font-mono text-[12px] bg-surface p-3 rounded-control border border-border">
+                  {unparsed.map((line, idx) => (
+                    <div key={idx} className="p-1.5 bg-canvas rounded-[6px] text-muted truncate">
+                      "{line}"
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </Card>
+      )}
     </div>
   );
 }

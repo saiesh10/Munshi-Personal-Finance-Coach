@@ -52,8 +52,8 @@ const DEFAULT_GOAL = {
   saved: 120000
 };
 
-export function LedgerProvider({ children }) {
-  const [activeTab, setActiveTab] = useState('paste');
+export function LedgerProvider({ children, initialTab = 'overview' }) {
+  const [activeTab, setActiveTab] = useState(initialTab);
   const [transactions, setTransactions] = useState([]);
   const [rules, setRules] = useState([]);
   const [subscriptions, setSubscriptions] = useState([]);
@@ -353,7 +353,7 @@ export function LedgerProvider({ children }) {
     setLastParseStats(null);
     setError(null);
     setShowResetModal(false);
-    setActiveTab('paste');
+    setActiveTab('overview');
   }, []);
 
   const value = {
