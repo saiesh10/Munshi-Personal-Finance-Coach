@@ -204,6 +204,21 @@ export default function PlanTab() {
     }));
   }, [projection]);
 
+  // Calculate exact delta in months between carry-on date and what-if date
+  const soonerMonths = useMemo(() => {
+    const continueStr = projection?.goalDateContinue;
+    const whatIfStr = projection?.goalDateWhatIf;
+    if (!continueStr || !whatIfStr) return 0;
+    if (continueStr === whatIfStr) return 0;
+
+    const dContinue = new Date(continueStr);
+    const dWhatIf = new Date(whatIfStr);
+    if (isNaN(dContinue.getTime()) || isNaN(dWhatIf.getTime())) return 0;
+
+    const diff = (dContinue.getFullYear() - dWhatIf.getFullYear()) * 12 + (dContinue.getMonth() - dWhatIf.getMonth());
+    return diff;
+  }, [projection?.goalDateContinue, projection?.goalDateWhatIf]);
+
   const targetAmount = Number(goal?.targetAmount) || 500000;
   const topCats = projection?.topCategories || [];
 
@@ -430,9 +445,15 @@ export default function PlanTab() {
                       <span className="text-[20px] font-bold text-success tabular-nums">
                         {projection.goalDateWhatIf}
                       </span>
-                      <Badge variant="success">
-                        4 months sooner
-                      </Badge>
+                      {soonerMonths > 0 ? (
+                        <Badge variant="success">
+                          {soonerMonths} {soonerMonths === 1 ? 'month' : 'months'} sooner
+                        </Badge>
+                      ) : (
+                        <Badge variant="neutral">
+                          No change yet
+                        </Badge>
+                      )}
                     </>
                   )}
                 </div>

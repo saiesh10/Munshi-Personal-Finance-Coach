@@ -57,4 +57,72 @@ describe('Simulate Engine', () => {
     const lastIdx = adjusted.continueSeries.length - 1;
     assert.ok(adjusted.whatIfSeries[lastIdx] >= adjusted.continueSeries[lastIdx], 'Adjusted savings should exceed baseline');
   });
+
+  test('Bug 2: topOverspend ignores Income, Rent, Transfers, Subscriptions and requires gap >= ₹500', () => {
+    // 1. In sample data, Subscriptions has high spend (Netflix, Hotstar, Swiggy One)
+    // topOverspend must NOT be Subscriptions
+    const proj = simulate({
+      profile: SAMPLE_PROFILE,
+      goal: SAMPLE_GOAL,
+      transactions: SAMPLE_TRANSACTIONS,
+      today: '2026-11-20'
+    });
+
+    if (proj.topOverspend) {
+      assert.notEqual(proj.topOverspend.category, 'Subscriptions', 'Subscriptions must be ignored from topOverspend');
+      assert.notEqual(proj.topOverspend.category, 'Income', 'Income must be ignored from topOverspend');
+      assert.notEqual(proj.topOverspend.category, 'Housing & Rent', 'Rent must be ignored from topOverspend');
+      assert.notEqual(proj.topOverspend.category, 'Transfers', 'Transfers must be ignored from topOverspend');
+      assert.ok(proj.topOverspend.rupeeGap >= 500, 'Rupee gap must be at least ₹500');
+    }
+
+    // 2. Test gap under ₹500 returns null
+    const txnsLowGap = [
+      { id: '1', date: '2026-10-15', amount: 3000, direction: 'debit', category: 'Food & Dining', merchant: 'Swiggy' },
+      // Current month spend is 3200 (gap is only 200, which is < 500)
+      { id: '2', date: '2026-11-15', amount: 3200, direction: 'debit', category: 'Food & Dining', merchant: 'Swiggy' }
+    ];
+
+    const projLow = simulate({
+      profile: SAMPLE_PROFILE,
+      goal: SAMPLE_GOAL,
+      transactions: txnsLowGap,
+      today: '2026-11-30'
+    });
+
+    assert.equal(projLow.topOverspend, null, 'Gap under ₹500 must return null');
+
+    // 3. Test gap >= ₹500 returns valid topOverspend
+    const txnsHighGap = [
+      { id: '1', date: '2026-10-15', amount: 3000, direction: 'debit', category: 'Food & Dining', merchant: 'Swiggy' },
+      // Current month spend is 5000 (gap is 2000, which is >= 500)
+      { id: '2', date: '2026-11-15', amount: 5000, direction: 'debit', category: 'Food & Dining', merchant: 'Swiggy' }
+    ];
+
+    const projHigh = simulate({
+      profile: SAMPLE_PROFILE,
+      goal: SAMPLE_GOAL,
+      transactions: txnsHighGap,
+      today: '2026-11-30'
+    });
+
+    assert.ok(projHigh.topOverspend, 'Gap >= ₹500 must return topOverspend object');
+    assert.equal(projHigh.topOverspend.category, 'Food & Dining');
+    assert.equal(projHigh.topOverspend.rupeeGap, 2000);
+
+    // 4. Test that detectDrift uses this exact same value
+    const { detectDrift } = require('../lib/engine/drift');
+    const nudges = detectDrift({
+      transactions: txnsHighGap,
+      profile: SAMPLE_PROFILE,
+      goal: SAMPLE_GOAL,
+      today: '2026-11-30'
+    });
+
+    assert.ok(nudges.length > 0, 'Should have nudges');
+    const warningNudge = nudges.find(n => n.type === 'warning');
+    assert.ok(warningNudge, 'Should have a warning nudge');
+    assert.equal(warningNudge.category, projHigh.topOverspend.category, 'Nudge category must match topOverspend category');
+    assert.equal(warningNudge.projectedOverspend, projHigh.topOverspend.rupeeGap, 'Nudge overspend must match topOverspend rupeeGap');
+  });
 });

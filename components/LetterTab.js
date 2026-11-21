@@ -444,11 +444,16 @@ export default function LetterTab() {
                   ? `${projection?.goalDatePlan || 'आगमन तिथि'} का संदेश`
                   : `Dispatch from ${projection?.goalDatePlan || 'the target arrival date'}`}
               </span>
-              <span className="text-[12px]">
-                {letter.source === 'gemini'
-                  ? 'Gemini 2.5 Flash'
-                  : (language === 'hi' ? 'ऑफ़लाइन संदेश' : 'Offline testimony')}
-              </span>
+              {letter.source === 'fallback' && (
+                <span className="text-[12px] text-muted">
+                  {language === 'hi' ? 'ऑफ़लाइन संदेश' : 'Offline testimony'}
+                </span>
+              )}
+              {letter.source === 'gemini' && (
+                <span className="text-[12px] text-muted">
+                  Gemini 2.5 Flash
+                </span>
+              )}
             </div>
 
             {/* Letter Body in Fraunces 21px / 1.75 */}
