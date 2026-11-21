@@ -141,7 +141,7 @@ export default function LetterTab() {
       goalName: goal?.name || 'Financial Goal',
       targetAmount: goal?.targetAmount || 500000,
       targetDate: goal?.targetDate || '2027-10-31',
-      saved: goal?.saved || 0,
+      saved: profile?.saved || goal?.saved || 120000,
       monthlyIncome: projection?.monthlyIncome || 92000,
       monthlyFixed: projection?.monthlyFixed || 33000,
       monthlyVariable: projection?.monthlyVariable || 38430,
@@ -162,8 +162,8 @@ export default function LetterTab() {
   };
 
   // Ask Question Handler
-  const submitQuestion = async (queryText, usedMic = false) => {
-    const q = queryText.trim();
+  const submitQuestion = async (queryText) => {
+    const q = (queryText || '').trim();
     if (!q || isAsking) return;
 
     setIsAsking(true);
@@ -187,15 +187,8 @@ export default function LetterTab() {
       };
 
       setConversation(prev => [...prev.slice(-2), newTurn]);
-
-      if (usedMic && ttsSupported) {
-        setSpeakingAnswerIndex(conversation.length);
-        speak(res.answer, {
-          lang: language === 'hi' ? 'hi-IN' : 'en-IN',
-          rate: getNumericRate(),
-          onEnd: () => setSpeakingAnswerIndex(-1)
-        });
-      }
+      // Note: Answers are displayed cleanly in the conversation bubble.
+      // Voice only plays when the user explicitly clicks the "Hear it" / "सुनें" button.
     } catch (err) {
       setAskError(
         err.message ||

@@ -151,4 +151,48 @@ describe('Future You Voice & Ask Engine', () => {
     assert.ok(res8000.answer.includes('8,000') || res8000.answer.includes('8000'), 'Should mention 8,000 in answer');
     assert.ok(res10000.answer.includes('10,000') || res10000.answer.includes('10000'), 'Should mention 10,000 in answer');
   });
+
+  test('Accurately answers status questions: rent, savings, income, and Hindi equivalents', async () => {
+    // Current rent status
+    const rentStatus = await answerFutureQuestion({
+      question: 'what is my current rent?',
+      summary: mockSummary,
+      history: []
+    });
+    assert.ok(rentStatus.answer.includes('28,000'), 'Should mention current rent of ₹28,000');
+
+    // Savings status
+    const savingsStatus = await answerFutureQuestion({
+      question: 'how much have I saved?',
+      summary: mockSummary,
+      history: []
+    });
+    assert.ok(savingsStatus.answer.includes('1,20,000') || savingsStatus.answer.includes('120000'), 'Should mention saved corpus');
+
+    // Income status
+    const incomeStatus = await answerFutureQuestion({
+      question: 'what is my monthly income?',
+      summary: mockSummary,
+      history: []
+    });
+    assert.ok(incomeStatus.answer.includes('92,000') || incomeStatus.answer.includes('92000'), 'Should mention monthly income');
+
+    // Hindi rent status
+    const hindiRent = await answerFutureQuestion({
+      question: 'मेरा किराया कितना है?',
+      summary: mockSummary,
+      history: [],
+      lang: 'hi'
+    });
+    assert.ok(hindiRent.answer.includes('किराया') && (hindiRent.answer.includes('28,000') || hindiRent.answer.includes('28000')), 'Should answer Hindi rent correctly');
+
+    // Hindi savings status
+    const hindiSavings = await answerFutureQuestion({
+      question: 'मेरी बचत कितनी है?',
+      summary: mockSummary,
+      history: [],
+      lang: 'hi'
+    });
+    assert.ok(hindiSavings.answer.includes('1,20,000') || hindiSavings.answer.includes('120000'), 'Should answer Hindi savings correctly');
+  });
 });

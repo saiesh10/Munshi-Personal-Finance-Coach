@@ -6,6 +6,30 @@
 
 export const dynamic = 'force-dynamic';
 
+/**
+ * Split text into chunks <= maxLen characters on word boundaries
+ * to comply with Google Translate TTS length restrictions.
+ */
+function splitIntoTtsChunks(text, maxLen = 160) {
+  if (!text || text.length <= maxLen) return [text.trim()];
+  const words = text.trim().split(/\s+/);
+  const chunks = [];
+  let current = '';
+
+  for (const word of words) {
+    if (!current) {
+      current = word;
+    } else if ((current + ' ' + word).length <= maxLen) {
+      current += ' ' + word;
+    } else {
+      chunks.push(current);
+      current = word;
+    }
+  }
+  if (current) chunks.push(current);
+  return chunks;
+}
+
 export async function GET(req) {
   const { searchParams } = new URL(req.url);
   const text = searchParams.get('text');
@@ -18,29 +42,40 @@ export async function GET(req) {
     });
   }
 
-  // Sanitize text and cap chunk length at 500 characters
-  const cleanText = text.trim().slice(0, 500);
+  // Clean text and cap total length
+  const cleanText = text.trim().slice(0, 1000);
   const ttsLang = lang.toLowerCase().startsWith('hi') ? 'hi' : 'en-IN';
-
-  const ttsUrl = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(cleanText)}&tl=${ttsLang}&client=tw-ob`;
+  const chunks = splitIntoTtsChunks(cleanText, 160);
 
   try {
-    const upstreamRes = await fetch(ttsUrl, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-      }
-    });
+    const audioBuffers = [];
 
-    if (!upstreamRes.ok) {
-      return new Response(JSON.stringify({ error: 'TTS upstream provider error' }), {
-        status: upstreamRes.status,
+    for (const chunk of chunks) {
+      const ttsUrl = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(chunk)}&tl=${ttsLang}&client=tw-ob`;
+      const upstreamRes = await fetch(ttsUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
+      });
+
+      if (!upstreamRes.ok) {
+        throw new Error(`Upstream TTS returned ${upstreamRes.status}`);
+      }
+
+      const buf = await upstreamRes.arrayBuffer();
+      audioBuffers.push(Buffer.from(buf));
+    }
+
+    if (audioBuffers.length === 0) {
+      return new Response(JSON.stringify({ error: 'No audio generated' }), {
+        status: 502,
         headers: { 'Content-Type': 'application/json' }
       });
     }
 
-    const audioBuffer = await upstreamRes.arrayBuffer();
+    const combined = Buffer.concat(audioBuffers);
 
-    return new Response(audioBuffer, {
+    return new Response(combined, {
       status: 200,
       headers: {
         'Content-Type': 'audio/mpeg',
