@@ -1,6 +1,7 @@
 /**
  * @file app/api/ask/route.js
  * Conversational Route Handler for asking Future You questions by voice or text.
+ * Supports English and Hindi queries and responses.
  */
 
 import { z } from 'zod';
@@ -18,7 +19,8 @@ const AskSchema = z.object({
       q: z.string(),
       a: z.string()
     })
-  ).max(3).optional().default([])
+  ).max(3).optional().default([]),
+  lang: z.enum(['en', 'hi']).optional().default('en')
 });
 
 export async function POST(req) {
@@ -32,7 +34,8 @@ export async function POST(req) {
     return errorResponse(validation.error.errors[0]?.message || 'Invalid request body', 400);
   }
 
-  const { question, summary, history } = validation.data;
+  const { question, summary, history, lang } = validation.data;
+  const activeLang = lang || summary?.lang || 'en';
   const clientIp = getClientIp(req);
 
   try {
@@ -40,13 +43,14 @@ export async function POST(req) {
       question,
       summary,
       history,
-      clientIp
+      clientIp,
+      lang: activeLang
     });
 
     return jsonResponse(result);
   } catch (err) {
     return jsonResponse({
-      answer: getGenericFallbackAnswer(summary),
+      answer: getGenericFallbackAnswer(summary, activeLang),
       source: 'fallback'
     });
   }

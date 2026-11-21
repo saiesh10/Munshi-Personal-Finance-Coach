@@ -245,7 +245,7 @@ export function LedgerProvider({ children, initialTab = 'overview' }) {
   }, [profile, goal, transactions, adjustments]);
 
   // Generate Future You Letter
-  const handleGenerateLetter = useCallback(async () => {
+  const handleGenerateLetter = useCallback(async (selectedLang = 'en') => {
     setIsLoading(true);
     setError(null);
 
@@ -269,7 +269,8 @@ export function LedgerProvider({ children, initialTab = 'overview' }) {
         goalDateWhatIf: currentProj.goalDateWhatIf,
         topCategory: currentProj.topOverspend?.category || currentProj.topCategories?.[0]?.category || 'General Spending',
         topOverspendRupeeGap: currentProj.topOverspend?.rupeeGap || 0,
-        cutPctNeeded: currentProj.cutPctNeeded || 15
+        cutPctNeeded: currentProj.cutPctNeeded || 15,
+        lang: selectedLang
       };
 
       const letterRes = await writeLetter({ summary });

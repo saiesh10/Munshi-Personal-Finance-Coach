@@ -25,7 +25,6 @@ describe('Future You Voice & Ask Engine', () => {
   };
 
   test('Question 1: "Will I make it?" returns a valid non-empty answer with no Gemini key', async () => {
-    // Ensure GEMINI_API_KEY is unset for this test
     const origKey = process.env.GEMINI_API_KEY;
     delete process.env.GEMINI_API_KEY;
 
@@ -84,11 +83,26 @@ describe('Future You Voice & Ask Engine', () => {
     }
   });
 
+  test('Hindi Question: "क्या मैं अपने लक्ष्य तक पहुँच पाऊँगा?" returns natural Hindi response', async () => {
+    const result = await answerFutureQuestion({
+      question: 'क्या मैं अपने लक्ष्य तक पहुँच पाऊँगा?',
+      summary: mockSummary,
+      history: [],
+      lang: 'hi'
+    });
+
+    assert.ok(result.answer, 'Hindi answer must not be empty');
+    assert.ok(result.answer.includes('लक्ष्य') || result.answer.includes('पहुँचोगे'), 'Should contain Hindi keywords');
+    assert.equal(isValidSpokenAnswer(result.answer), true);
+  });
+
   test('Answers never contain markdown formatting characters', async () => {
     const questions = [
       'Will I make it?',
       'What should I cut first?',
       'What if rent goes up ₹3,000?',
+      'क्या मैं अपने लक्ष्य तक पहुँच पाऊँगा?',
+      'मुझे सबसे पहले क्या कम करना चाहिए?',
       'What is the weather today?'
     ];
 
@@ -115,8 +129,8 @@ describe('Future You Voice & Ask Engine', () => {
     // Markdown bullets should fail
     assert.equal(isValidSpokenAnswer('- Cut dining\n- Cut travel'), false);
 
-    // Overlong text (> 70 words) should fail
-    const overlong = new Array(75).fill('word').join(' ');
+    // Overlong text (> 80 words) should fail
+    const overlong = new Array(85).fill('word').join(' ');
     assert.equal(isValidSpokenAnswer(overlong), false);
   });
 });

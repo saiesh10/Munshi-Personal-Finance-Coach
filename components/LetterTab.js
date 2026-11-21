@@ -12,7 +12,8 @@ import {
   Sparkles,
   Volume2,
   CheckCircle2,
-  Loader2
+  Loader2,
+  Globe
 } from 'lucide-react';
 import Card from './ui/Card';
 import Button from './ui/Button';
@@ -33,6 +34,9 @@ export default function LetterTab() {
     projection,
     goal
   } = useLedger();
+
+  // Language state: 'en' | 'hi'
+  const [language, setLanguage] = useState('en');
 
   // TTS State
   const [ttsSupported, setTtsSupported] = useState(false);
@@ -62,6 +66,13 @@ export default function LetterTab() {
 
   const letterSentences = letter?.text ? splitSentences(letter.text) : [];
 
+  // Parse speed numeric value
+  const getNumericRate = () => {
+    if (speed === '0.9x') return 0.9;
+    if (speed === '1.25x') return 1.25;
+    return 1.0;
+  };
+
   // Play Letter Audio from sentence index
   const handlePlayFromIndex = (startIndex = 0) => {
     if (!letter?.text || !ttsSupported) return;
@@ -74,6 +85,8 @@ export default function LetterTab() {
     const textToSpeak = startIndex > 0 ? letterSentences.slice(startIndex).join(' ') : letter.text;
 
     speak(textToSpeak, {
+      lang: language === 'hi' ? 'hi-IN' : 'en-IN',
+      rate: getNumericRate(),
       onSentence: (idx) => {
         setActiveSentenceIndex(startIndex + idx);
       },
@@ -106,6 +119,17 @@ export default function LetterTab() {
     setActiveSentenceIndex(-1);
   };
 
+  // Handle Language Switch
+  const handleLanguageChange = (newLang) => {
+    if (newLang === language) return;
+    setLanguage(newLang);
+    handleStop();
+    // Regenerate letter in the chosen language if a letter is already loaded
+    if (letter) {
+      handleGenerateLetter(newLang);
+    }
+  };
+
   // Build summary payload for /api/ask
   const buildCurrentSummary = () => {
     return {
@@ -125,7 +149,8 @@ export default function LetterTab() {
       topCategory: projection?.topOverspend?.category || projection?.topCategories?.[0]?.category || 'Food & Dining',
       topCategories: projection?.topCategories || [],
       topOverspendRupeeGap: projection?.topOverspend?.rupeeGap || 2500,
-      cutPctNeeded: projection?.cutPctNeeded || 15
+      cutPctNeeded: projection?.cutPctNeeded || 15,
+      lang: language
     };
   };
 
@@ -157,10 +182,18 @@ export default function LetterTab() {
       setConversation(prev => [...prev.slice(-2), newTurn]);
 
       if (usedMic && ttsSupported) {
-        speak(res.answer);
+        speak(res.answer, {
+          lang: language === 'hi' ? 'hi-IN' : 'en-IN',
+          rate: getNumericRate()
+        });
       }
     } catch (err) {
-      setAskError(err.message || 'Future You could not respond right now.');
+      setAskError(
+        err.message ||
+        (language === 'hi'
+          ? 'भविष्य अभी उत्तर देने में असमर्थ है।'
+          : 'Future You could not respond right now.')
+      );
     } finally {
       setIsAsking(false);
     }
@@ -175,13 +208,20 @@ export default function LetterTab() {
     }
 
     listen({
+      lang: language === 'hi' ? 'hi-IN' : 'en-IN',
       onResult: (transcript) => {
         setSttState('idle');
         submitQuestion(transcript, true);
       },
       onError: (err) => {
         setSttState('idle');
-        setAskError(typeof err === 'string' ? err : 'Could not hear speech. Please type your question.');
+        setAskError(
+          typeof err === 'string'
+            ? err
+            : (language === 'hi'
+                ? 'आवाज़ सुनाई नहीं दी। कृपया अपना प्रश्न टाइप करें।'
+                : 'Could not hear speech. Please type your question.')
+        );
       },
       onEnd: () => setSttState('idle'),
       onStateChange: (state) => setSttState(state)
@@ -190,17 +230,20 @@ export default function LetterTab() {
 
   const handleSpeakAnswer = (text) => {
     if (!ttsSupported) return;
-    speak(text);
+    speak(text, {
+      lang: language === 'hi' ? 'hi-IN' : 'en-IN',
+      rate: getNumericRate()
+    });
   };
 
-  // Mock audio download trigger
+  // Text download trigger
   const handleDownloadAudio = () => {
     if (!letter?.text) return;
     const blob = new Blob([letter.text], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `future_you_letter_${new Date().toISOString().slice(0, 10)}.txt`;
+    a.download = `future_you_letter_${language}_${new Date().toISOString().slice(0, 10)}.txt`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -222,11 +265,28 @@ export default function LetterTab() {
         </div>
 
         <h2 className="font-serif text-[38px] sm:text-[40px] font-normal text-ink leading-tight">
-          Future You
+          {language === 'hi' ? 'भविष्य का संदेश' : 'Future You'}
         </h2>
         <p className="text-[15px] text-muted mt-1 max-w-md">
-          Hear from the person you're becoming. A dispatch from your arrival date.
+          {language === 'hi'
+            ? 'उस इंसान की आवाज़ सुनें जो आप बनने जा रहे हैं। आपकी मंज़िल की तारीख से एक ख़त।'
+            : "Hear from the person you're becoming. A dispatch from your arrival date."}
         </p>
+
+        {/* Dual Language Switcher Header */}
+        <div className="mt-4 flex items-center gap-2">
+          <Globe className="w-4 h-4 text-muted" />
+          <Segmented
+            size="sm"
+            options={[
+              { value: 'en', label: 'English' },
+              { value: 'hi', label: 'हिंदी' }
+            ]}
+            value={language}
+            onChange={handleLanguageChange}
+            name="voice-language"
+          />
+        </div>
       </div>
 
       {/* When no letter exists yet: Generation Card */}
@@ -236,7 +296,9 @@ export default function LetterTab() {
             <div className="flex flex-col items-center justify-center py-8 gap-3">
               <Loader2 className="w-8 h-8 animate-spin text-primary stroke-[2]" />
               <p className="font-serif text-[18px] text-ink italic">
-                Munshi is writing your testimony...
+                {language === 'hi'
+                  ? 'मुंशी आपका ख़त तैयार कर रहा है...'
+                  : 'Munshi is writing your testimony...'}
               </p>
               <Skeleton className="w-64 h-3.5 mt-2" />
               <Skeleton className="w-48 h-3.5" />
@@ -244,15 +306,17 @@ export default function LetterTab() {
           ) : (
             <>
               <p className="text-[14px] text-muted max-w-md leading-relaxed">
-                Munshi summarizes your current savings margin, recurring leaks, and target horizon to generate a personal letter from your arrival milestone.
+                {language === 'hi'
+                  ? 'मुंशी आपकी वर्तमान बचत, आदतों और लक्ष्य की तारीख का विश्लेषण करके भविष्य के आगमन दिन से एक व्यक्तिगत संदेश तैयार करता है।'
+                  : 'Munshi summarizes your current savings margin, recurring leaks, and target horizon to generate a personal letter from your arrival milestone.'}
               </p>
               <Button
                 variant="primary"
                 size="lg"
                 icon={Sparkles}
-                onClick={handleGenerateLetter}
+                onClick={() => handleGenerateLetter(language)}
               >
-                Write my letter
+                {language === 'hi' ? 'मेरा ख़त लिखें' : 'Write my letter'}
               </Button>
             </>
           )}
@@ -279,10 +343,16 @@ export default function LetterTab() {
 
                 <div className="flex flex-col">
                   <span className="text-[14px] font-semibold text-ink leading-tight">
-                    {isPlaying ? (isPaused ? 'Paused' : 'Speaking letter…') : 'Listen to letter'}
+                    {isPlaying
+                      ? isPaused
+                        ? (language === 'hi' ? 'रुक गया' : 'Paused')
+                        : (language === 'hi' ? 'ख़त सुना रहे हैं…' : 'Speaking letter…')
+                      : (language === 'hi' ? 'ख़त सुनें' : 'Listen to letter')}
                   </span>
                   <span className="text-[12px] text-muted">
-                    {ttsSupported ? 'Indian English narration' : 'Speech synthesis not available'}
+                    {ttsSupported
+                      ? (language === 'hi' ? 'हिंदी प्राकृतिक स्वर (Natural Hindi Audio)' : 'Indian English narration (Natural Neural)')
+                      : 'Speech synthesis not available'}
                   </span>
                 </div>
               </div>
@@ -316,7 +386,9 @@ export default function LetterTab() {
                   onClick={handleDownloadAudio}
                   aria-label="Download testimony"
                 >
-                  <span className="hidden sm:inline">Download</span>
+                  <span className="hidden sm:inline">
+                    {language === 'hi' ? 'डाउनलोड' : 'Download'}
+                  </span>
                 </Button>
               </div>
             </div>
@@ -338,9 +410,13 @@ export default function LetterTab() {
                 </div>
                 <div className="flex items-center justify-between text-[11px] text-muted">
                   <span>
-                    Sentence {activeSentenceIndex >= 0 ? activeSentenceIndex + 1 : 1} of {letterSentences.length}
+                    {language === 'hi'
+                      ? `वाक्य ${activeSentenceIndex >= 0 ? activeSentenceIndex + 1 : 1} / ${letterSentences.length}`
+                      : `Sentence ${activeSentenceIndex >= 0 ? activeSentenceIndex + 1 : 1} of ${letterSentences.length}`}
                   </span>
-                  <span>Click any sentence to seek</span>
+                  <span>
+                    {language === 'hi' ? 'सुनने के लिए किसी भी वाक्य पर क्लिक करें' : 'Click any sentence to seek'}
+                  </span>
                 </div>
               </div>
             )}
@@ -353,16 +429,22 @@ export default function LetterTab() {
           >
             {/* Date line */}
             <div className="flex items-center justify-between text-[13px] font-medium text-muted pb-4 border-b border-border/60">
-              <span>Dispatch from {projection?.goalDatePlan || 'the target arrival date'}</span>
+              <span>
+                {language === 'hi'
+                  ? `${projection?.goalDatePlan || 'आगमन तिथि'} का संदेश`
+                  : `Dispatch from ${projection?.goalDatePlan || 'the target arrival date'}`}
+              </span>
               <span className="text-[12px]">
-                {letter.source === 'gemini' ? 'Gemini 2.5 Flash' : 'Offline testimony'}
+                {letter.source === 'gemini'
+                  ? 'Gemini 2.5 Flash'
+                  : (language === 'hi' ? 'ऑफ़लाइन संदेश' : 'Offline testimony')}
               </span>
             </div>
 
             {/* Letter Body in Fraunces 21px / 1.75 */}
             <div className="space-y-4">
               <span className="font-serif text-[20px] text-muted italic block">
-                Dear me,
+                {language === 'hi' ? 'प्रिय मैं,' : 'Dear me,'}
               </span>
 
               <p className="font-serif text-[20px] sm:text-[21px] leading-[1.75] text-ink font-normal">
@@ -385,22 +467,26 @@ export default function LetterTab() {
               </p>
 
               <div className="pt-4 font-serif text-[18px] text-muted italic">
-                — You, {projection?.goalDatePlan || 'Future Self'}
+                {language === 'hi'
+                  ? `— तुम, ${projection?.goalDatePlan || 'भविष्य'}`
+                  : `— You, ${projection?.goalDatePlan || 'Future Self'}`}
               </div>
             </div>
 
             {/* Retrigger Action */}
             <div className="pt-4 border-t border-border/60 flex items-center justify-between">
               <span className="text-[12px] text-muted">
-                Letters are generated strictly from your summary numbers.
+                {language === 'hi'
+                  ? 'यह ख़त केवल आपके वित्तीय आंकड़ों के आधार पर तैयार किया गया है।'
+                  : 'Letters are generated strictly from your summary numbers.'}
               </span>
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={handleGenerateLetter}
+                onClick={() => handleGenerateLetter(language)}
                 loading={isLetterLoading}
               >
-                Write another
+                {language === 'hi' ? 'नया ख़त लिखें' : 'Write another'}
               </Button>
             </div>
           </div>
@@ -415,43 +501,82 @@ export default function LetterTab() {
               <Sparkles className="w-3.5 h-3.5 stroke-[2]" />
             </div>
             <div>
-              <h3 className="font-semibold text-[16px] text-ink">Ask Future You</h3>
-              <p className="text-[12px] text-muted">Talk or type to hear advice from your future self</p>
+              <h3 className="font-semibold text-[16px] text-ink">
+                {language === 'hi' ? 'भविष्य से पूछें' : 'Ask Future You'}
+              </h3>
+              <p className="text-[12px] text-muted">
+                {language === 'hi'
+                  ? 'बोलकर या लिखकर अपने भविष्य से सलाह लें'
+                  : 'Talk or type to hear advice from your future self'}
+              </p>
             </div>
           </div>
 
           <span className="text-[12px] font-medium text-success bg-primary-tint px-2.5 py-0.5 rounded-full">
-            Ready
+            {language === 'hi' ? 'सक्रिय' : 'Ready'}
           </span>
         </div>
 
         {/* Suggestion Chips */}
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-[12px] font-medium text-muted">Ask:</span>
-          <button
-            type="button"
-            disabled={isAsking}
-            onClick={() => submitQuestion('Will I make it?')}
-            className="px-3 py-1 rounded-full text-[12px] font-medium bg-canvas hover:bg-border text-ink transition-colors cursor-pointer"
-          >
-            "Will I make it?"
-          </button>
-          <button
-            type="button"
-            disabled={isAsking}
-            onClick={() => submitQuestion('What should I cut first?')}
-            className="px-3 py-1 rounded-full text-[12px] font-medium bg-canvas hover:bg-border text-ink transition-colors cursor-pointer"
-          >
-            "What should I cut first?"
-          </button>
-          <button
-            type="button"
-            disabled={isAsking}
-            onClick={() => submitQuestion('What if rent goes up ₹3,000?')}
-            className="px-3 py-1 rounded-full text-[12px] font-medium bg-canvas hover:bg-border text-ink transition-colors cursor-pointer"
-          >
-            "What if rent goes up ₹3,000?"
-          </button>
+          <span className="text-[12px] font-medium text-muted">
+            {language === 'hi' ? 'पूछें:' : 'Ask:'}
+          </span>
+          {language === 'hi' ? (
+            <>
+              <button
+                type="button"
+                disabled={isAsking}
+                onClick={() => submitQuestion('क्या मैं अपने लक्ष्य तक पहुँच पाऊँगा?')}
+                className="px-3 py-1 rounded-full text-[12px] font-medium bg-canvas hover:bg-border text-ink transition-colors cursor-pointer"
+              >
+                "क्या मैं अपने लक्ष्य तक पहुँच पाऊँगा?"
+              </button>
+              <button
+                type="button"
+                disabled={isAsking}
+                onClick={() => submitQuestion('मुझे सबसे पहले क्या कम करना चाहिए?')}
+                className="px-3 py-1 rounded-full text-[12px] font-medium bg-canvas hover:bg-border text-ink transition-colors cursor-pointer"
+              >
+                "मुझे सबसे पहले क्या कम करना चाहिए?"
+              </button>
+              <button
+                type="button"
+                disabled={isAsking}
+                onClick={() => submitQuestion('अगर किराया ₹3,000 बढ़ जाए तो क्या होगा?')}
+                className="px-3 py-1 rounded-full text-[12px] font-medium bg-canvas hover:bg-border text-ink transition-colors cursor-pointer"
+              >
+                "अगर किराया ₹3,000 बढ़ जाए तो क्या होगा?"
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                disabled={isAsking}
+                onClick={() => submitQuestion('Will I make it?')}
+                className="px-3 py-1 rounded-full text-[12px] font-medium bg-canvas hover:bg-border text-ink transition-colors cursor-pointer"
+              >
+                "Will I make it?"
+              </button>
+              <button
+                type="button"
+                disabled={isAsking}
+                onClick={() => submitQuestion('What should I cut first?')}
+                className="px-3 py-1 rounded-full text-[12px] font-medium bg-canvas hover:bg-border text-ink transition-colors cursor-pointer"
+              >
+                "What should I cut first?"
+              </button>
+              <button
+                type="button"
+                disabled={isAsking}
+                onClick={() => submitQuestion('What if rent goes up ₹3,000?')}
+                className="px-3 py-1 rounded-full text-[12px] font-medium bg-canvas hover:bg-border text-ink transition-colors cursor-pointer"
+              >
+                "What if rent goes up ₹3,000?"
+              </button>
+            </>
+          )}
         </div>
 
         {/* Conversation Message Bubbles */}
@@ -480,7 +605,7 @@ export default function LetterTab() {
                         className="text-[12px] font-medium text-primary hover:underline flex items-center gap-1 self-start cursor-pointer pt-1"
                       >
                         <Volume2 className="w-3.5 h-3.5" />
-                        <span>Hear it</span>
+                        <span>{language === 'hi' ? 'सुनें' : 'Hear it'}</span>
                       </button>
                     )}
                   </div>
@@ -498,7 +623,9 @@ export default function LetterTab() {
               <span className="w-1.5 h-1.5 rounded-full bg-muted animate-bounce" style={{ animationDelay: '150ms' }} />
               <span className="w-1.5 h-1.5 rounded-full bg-muted animate-bounce" style={{ animationDelay: '300ms' }} />
             </div>
-            <span>Future You is thinking…</span>
+            <span>
+              {language === 'hi' ? 'भविष्य विचार कर रहा है…' : 'Future You is thinking…'}
+            </span>
           </div>
         )}
 
@@ -522,7 +649,11 @@ export default function LetterTab() {
               }`}
             >
               <Mic className="w-4 h-4 stroke-[2]" />
-              <span>{sttState === 'listening' ? 'Listening…' : 'Speak'}</span>
+              <span>
+                {sttState === 'listening'
+                  ? (language === 'hi' ? 'सुन रहे हैं…' : 'Listening…')
+                  : (language === 'hi' ? 'बोलें' : 'Speak')}
+              </span>
             </button>
           )}
 
@@ -534,8 +665,8 @@ export default function LetterTab() {
               onChange={(e) => setQuestionInput(e.target.value)}
               placeholder={
                 sttState === 'listening'
-                  ? 'Listening to your voice...'
-                  : 'Ask about rent hikes, savings, or what to trim...'
+                  ? (language === 'hi' ? 'आपकी आवाज़ सुन रहे हैं...' : 'Listening to your voice...')
+                  : (language === 'hi' ? 'किराए, बचत या कटौती के बारे में पूछें...' : 'Ask about rent hikes, savings, or what to trim...')
               }
               className="w-full bg-canvas border border-border rounded-control h-10 px-3.5 text-[14px] text-ink placeholder:text-muted/60 focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary transition-all"
             />
@@ -547,7 +678,7 @@ export default function LetterTab() {
             disabled={isAsking || !questionInput.trim()}
             icon={Send}
           >
-            Send
+            {language === 'hi' ? 'भेजें' : 'Send'}
           </Button>
         </form>
 

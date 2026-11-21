@@ -53,6 +53,30 @@ describe('Letter Engine & Rate Limiter', () => {
     assert.ok(isValidLetter(letter.text), 'Letter text must be valid format without markdown');
   });
 
+  test('Hindi Fallback templates generate valid Devanagari letters', () => {
+    const summaryNegative = {
+      goalName: 'आपातकालीन फंड',
+      targetDate: 'अक्टूबर 2027',
+      monthlyNet: -1500,
+      topCategory: 'खान-पान',
+      cutPctNeeded: 20
+    };
+    const letterHi1 = getFallbackLetter(summaryNegative, 'hi');
+    assert.ok(letterHi1.text.includes('ख़त लिख रहा हूँ'), 'Should have Hindi greeting/body');
+    assert.ok(isValidLetter(letterHi1.text), 'Hindi letter must be valid');
+
+    const summarySurplus = {
+      goalName: 'आपातकालीन फंड',
+      targetDate: 'अक्टूबर 2027',
+      monthlyNet: 25000,
+      shortfallAtTarget: 0,
+      topCategory: 'खान-पान'
+    };
+    const letterHi2 = getFallbackLetter(summarySurplus, 'hi');
+    assert.ok(letterHi2.text.includes('तुमने कर दिखाया'), 'Should have encouraging Hindi message');
+    assert.ok(isValidLetter(letterHi2.text), 'Hindi letter must be valid');
+  });
+
   test('formatRupees formats Indian currency commas correctly', () => {
     assert.equal(formatRupees(15000), '₹15,000');
     assert.equal(formatRupees(125000), '₹1,25,000');
