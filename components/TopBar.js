@@ -2,12 +2,12 @@
 
 import React, { useState } from 'react';
 import { useLedger } from '@/context/LedgerContext';
-import { ChevronLeft, ChevronRight, Database, Sparkles } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Database, Sparkles, RotateCcw } from 'lucide-react';
 import Button from './ui/Button';
 import AISettingsDialog from './AISettingsDialog';
 
 export default function TopBar({ onMonthChange }) {
-  const { activeTab, handleLoadSampleData, isLoading, transactions } = useLedger();
+  const { activeTab, handleLoadSampleData, isLoading, transactions, setShowResetModal } = useLedger();
   const [showAiSettings, setShowAiSettings] = useState(false);
 
   // Tab Titles
@@ -95,6 +95,18 @@ export default function TopBar({ onMonthChange }) {
         >
           Sample data
         </Button>
+
+        {/* Reset Books Button (Visible on mobile & desktop) */}
+        <button
+          type="button"
+          onClick={() => setShowResetModal(true)}
+          title="Reset books"
+          className="h-8 px-2 sm:px-2.5 rounded-control text-muted hover:text-danger hover:bg-danger-tint border border-border bg-canvas flex items-center gap-1.5 text-[12px] font-medium transition-colors cursor-pointer shrink-0"
+          aria-label="Reset books"
+        >
+          <RotateCcw className="w-3.5 h-3.5" />
+          <span className="hidden sm:inline">Reset</span>
+        </button>
       </div>
 
       <AISettingsDialog

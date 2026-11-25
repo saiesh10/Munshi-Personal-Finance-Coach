@@ -17,7 +17,8 @@ import {
   Trash2,
   ChevronDown,
   ChevronUp,
-  Loader2
+  Loader2,
+  RotateCcw
 } from 'lucide-react';
 import Card, { CardHeader } from './ui/Card';
 import Button from './ui/Button';
@@ -36,7 +37,8 @@ export default function PasteTab() {
     unparsed,
     isLoading,
     error,
-    setActiveTab
+    setActiveTab,
+    setShowResetModal
   } = useLedger();
 
   const [activeSegment, setActiveSegment] = useState('text'); // 'text' | 'file'
@@ -245,15 +247,27 @@ export default function PasteTab() {
           )}
 
           {/* Footer Action Strip */}
-          <div className="flex items-center justify-between pt-3 border-t border-border">
-            <Button
-              variant="ghost"
-              size="sm"
-              icon={Database}
-              onClick={handleLoadSampleData}
-            >
-              Use sample data
-            </Button>
+          <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-border">
+            <div className="flex items-center gap-3">
+              <Button
+                variant="ghost"
+                size="sm"
+                icon={Database}
+                onClick={handleLoadSampleData}
+              >
+                Use sample data
+              </Button>
+
+              <button
+                type="button"
+                onClick={() => setShowResetModal(true)}
+                className="text-[12px] text-muted hover:text-danger hover:underline flex items-center gap-1 cursor-pointer transition-colors"
+                title="Clear all local data and reset books"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>Reset books</span>
+              </button>
+            </div>
 
             <Button
               variant="primary"

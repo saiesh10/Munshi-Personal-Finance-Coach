@@ -11,7 +11,8 @@ import {
   Sparkles,
   ArrowRight,
   ClipboardPaste,
-  Database
+  Database,
+  RotateCcw
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -43,6 +44,7 @@ export default function OverviewTab() {
     nudges,
     setActiveTab,
     handleLoadSampleData,
+    setShowResetModal,
     isLoading
   } = useLedger();
 
@@ -474,6 +476,21 @@ export default function OverviewTab() {
             })}
           </div>
         </Card>
+      </div>
+
+      {/* Ledger Management Footer Strip */}
+      <div className="flex flex-wrap items-center justify-between gap-3 pt-3 pb-2 px-1 text-[13px] text-muted border-t border-border/60">
+        <span className="text-[12px]">
+          {transactions.length} transactions stored locally in your browser
+        </span>
+        <button
+          type="button"
+          onClick={() => setShowResetModal(true)}
+          className="flex items-center gap-1.5 text-muted hover:text-danger hover:underline transition-colors cursor-pointer text-[12px] font-medium"
+        >
+          <RotateCcw className="w-3.5 h-3.5" />
+          <span>Reset books</span>
+        </button>
       </div>
     </div>
   );
