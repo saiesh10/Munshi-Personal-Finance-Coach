@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import { useLedger } from '@/context/LedgerContext';
 import {
   LayoutDashboard,
@@ -28,6 +28,10 @@ export default function Header() {
   ];
 
   const currentTab = (activeTab === 'quiet-leaks') ? 'leaks' : activeTab;
+
+  const todayStr = useMemo(() => {
+    return new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+  }, []);
 
   return (
     <>
@@ -90,7 +94,7 @@ export default function Header() {
           <div className="p-3 bg-canvas border border-border rounded-control flex flex-col gap-1">
             <div className="flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-success animate-pulse" />
-              <span className="text-[12px] font-medium text-ink">Up to date as of 21 Nov 2026</span>
+              <span className="text-[12px] font-medium text-ink">Up to date as of {todayStr}</span>
             </div>
             <span className="text-[11px] text-muted pl-4">
               {transactions.length} {transactions.length === 1 ? 'transaction' : 'transactions'} in ledger

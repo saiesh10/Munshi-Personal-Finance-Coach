@@ -21,6 +21,7 @@ import Segmented from './ui/Segmented';
 import Select from './ui/Select';
 import Skeleton from './ui/Skeleton';
 import FutureYouAvatar from './FutureYouAvatar';
+import AISettingsDialog from './AISettingsDialog';
 import { isSupported as isTtsSupported, speak, pause, resume, stop, splitSentences } from '@/lib/voice';
 import { isSupported as isSttSupported, listen, stopListening } from '@/lib/stt';
 import { askFuture } from '@/lib/client';
@@ -56,6 +57,7 @@ export default function LetterTab() {
   const [isAsking, setIsAsking] = useState(false);
   const [askError, setAskError] = useState(null);
   const [speakingAnswerIndex, setSpeakingAnswerIndex] = useState(-1);
+  const [showAiSettings, setShowAiSettings] = useState(false);
 
   useEffect(() => {
     setTtsSupported(isTtsSupported());
@@ -283,19 +285,31 @@ export default function LetterTab() {
             : "Hear from the person you're becoming. A dispatch from your arrival date."}
         </p>
 
-        {/* Dual Language Switcher Header */}
-        <div className="mt-4 flex items-center gap-2">
-          <Globe className="w-4 h-4 text-muted" />
-          <Segmented
+        {/* Dual Language Switcher Header & AI Config */}
+        <div className="mt-4 flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <Globe className="w-4 h-4 text-muted" />
+            <Segmented
+              size="sm"
+              options={[
+                { value: 'en', label: 'English' },
+                { value: 'hi', label: 'हिंदी' }
+              ]}
+              value={language}
+              onChange={handleLanguageChange}
+              name="voice-language"
+            />
+          </div>
+
+          <Button
+            variant="ghost"
             size="sm"
-            options={[
-              { value: 'en', label: 'English' },
-              { value: 'hi', label: 'हिंदी' }
-            ]}
-            value={language}
-            onChange={handleLanguageChange}
-            name="voice-language"
-          />
+            icon={Sparkles}
+            onClick={() => setShowAiSettings(true)}
+            className="text-[12px] text-primary hover:bg-primary-tint"
+          >
+            <span>AI Settings</span>
+          </Button>
         </div>
       </div>
 
@@ -709,6 +723,11 @@ export default function LetterTab() {
           <p className="text-[12px] text-danger mt-1">{askError}</p>
         )}
       </Card>
+
+      <AISettingsDialog
+        isOpen={showAiSettings}
+        onClose={() => setShowAiSettings(false)}
+      />
     </div>
   );
 }

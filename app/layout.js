@@ -18,8 +18,11 @@ export const metadata = {
   title: 'Munshi — Personal Finance Coach',
   description: 'Private, zero-cost personal finance management and projection bahi-khata for India.',
   icons: {
-    icon: '/icon.svg',
-    shortcut: '/icon.svg',
+    icon: [
+      { url: '/icon.svg', type: 'image/svg+xml' },
+      { url: '/favicon.ico' }
+    ],
+    shortcut: '/favicon.ico',
     apple: '/icon.svg'
   }
 };

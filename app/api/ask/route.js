@@ -37,6 +37,7 @@ export async function POST(req) {
   const { question, summary, history, lang } = validation.data;
   const activeLang = lang || summary?.lang || 'en';
   const clientIp = getClientIp(req);
+  const apiKey = req.headers.get('x-gemini-key') || req.headers.get('authorization')?.replace(/^Bearer\s+/i, '') || process.env.GEMINI_API_KEY;
 
   try {
     const result = await answerFutureQuestion({
@@ -44,7 +45,8 @@ export async function POST(req) {
       summary,
       history,
       clientIp,
-      lang: activeLang
+      lang: activeLang,
+      apiKey
     });
 
     return jsonResponse(result);

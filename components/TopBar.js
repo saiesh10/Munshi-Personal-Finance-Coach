@@ -2,11 +2,13 @@
 
 import React, { useState } from 'react';
 import { useLedger } from '@/context/LedgerContext';
-import { ChevronLeft, ChevronRight, Database } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Database, Sparkles } from 'lucide-react';
 import Button from './ui/Button';
+import AISettingsDialog from './AISettingsDialog';
 
 export default function TopBar({ onMonthChange }) {
   const { activeTab, handleLoadSampleData, isLoading, transactions } = useLedger();
+  const [showAiSettings, setShowAiSettings] = useState(false);
 
   // Tab Titles
   const titles = {
@@ -71,6 +73,17 @@ export default function TopBar({ onMonthChange }) {
           </button>
         </div>
 
+        {/* AI Key Settings Button */}
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setShowAiSettings(true)}
+          icon={Sparkles}
+          className="text-primary border-primary/30 hover:bg-primary-tint"
+        >
+          <span className="hidden sm:inline">AI Settings</span>
+        </Button>
+
         {/* Load Sample Data Button */}
         <Button
           variant="outline"
@@ -83,6 +96,11 @@ export default function TopBar({ onMonthChange }) {
           Sample data
         </Button>
       </div>
+
+      <AISettingsDialog
+        isOpen={showAiSettings}
+        onClose={() => setShowAiSettings(false)}
+      />
     </header>
   );
 }

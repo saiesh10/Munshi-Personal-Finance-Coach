@@ -100,7 +100,7 @@ export default function PasteTab() {
 
       await handleParseAndCategorize({
         text: activeSegment === 'text' ? inputText : (!isCsv ? fileContent : undefined),
-        csv: activeSegment === 'file' ? fileContent : undefined
+        csv: (activeSegment === 'file' && isCsv) ? fileContent : undefined
       });
 
       clearTimeout(stepTimer1);

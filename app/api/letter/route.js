@@ -29,9 +29,10 @@ export async function POST(req) {
   const { summary, lang } = validation.data;
   const activeLang = lang || summary?.lang || 'en';
   const clientIp = getClientIp(req);
+  const apiKey = req.headers.get('x-gemini-key') || req.headers.get('authorization')?.replace(/^Bearer\s+/i, '') || process.env.GEMINI_API_KEY;
 
   try {
-    const letter = await generateLetter(summary, clientIp, activeLang);
+    const letter = await generateLetter(summary, clientIp, activeLang, apiKey);
     return jsonResponse(letter);
   } catch (err) {
     // Graceful fallback: never crash or 500 on letter failure
